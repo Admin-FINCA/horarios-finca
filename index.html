@@ -4,112 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Horario Facultad de Ingeniería - UVM</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React y Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Firebase SDK (Compat) -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         
-        /* Habilitar scroll en toda la web */
+        /* Habilitar navegación vertical completa en toda la web */
         html, body { 
             font-family: 'Inter', sans-serif; 
             background-color: #0f172a; 
             margin: 0; 
             color: white;
-            min-height: 100vh;
+            height: auto !important;
             overflow-y: auto !important; 
             scroll-behavior: smooth;
         }
 
-        /* Estética limpia para el scroll */
-        ::-webkit-scrollbar {
-            width: 10px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0f172a;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 10px;
-            border: 2px solid #0f172a;
-        }
+        /* Estética de la barra de scroll */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; border: 2px solid #0f172a; }
 
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+        
+        .input-admin {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #475569;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            color: white;
+            width: 100%;
+            outline: none;
+        }
+        .input-admin:focus { border-color: #3b82f6; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- CONFIGURACIÓN DE FIREBASE ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
+        const { useState, useEffect, Fragment } = React;
 
-        const { useState, useEffect, Fragment, useCallback } = React;
-
-        // Iconos SVG nativos para evitar errores de red
+        // --- ICONOS SVG NATIVOS ---
         const Icon = ({ name, size = 24, className = "" }) => {
             const icons = {
                 Clock: <path d="M12 6v6l4 2" />,
-                Calendar: (
-                    <Fragment>
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                    </Fragment>
-                ),
+                Calendar: <Fragment><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Fragment>,
                 ChevronRight: <path d="m9 18 6-6-6-6" />,
                 ChevronLeft: <path d="m15 18-6-6 6-6" />,
-                Pause: (
-                    <Fragment>
-                        <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
-                    </Fragment>
-                ),
+                Pause: <Fragment><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></Fragment>,
                 Play: <path d="m5 3 14 9-14 9V3z" />,
-                Monitor: (
-                    <Fragment>
-                        <rect x="2" y="3" width="20" height="14" rx="2" />
-                        <line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-                    </Fragment>
-                ),
-                Lock: (
-                    <Fragment>
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    </Fragment>
-                ),
-                GraduationCap: (
-                    <Fragment>
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" />
-                    </Fragment>
-                ),
-                Save: (
-                    <Fragment>
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                        <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
-                    </Fragment>
-                )
+                Lock: <Fragment><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Fragment>,
+                GraduationCap: <Fragment><path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" /></Fragment>,
+                Monitor: <Fragment><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></Fragment>
             };
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    {icons[name] || null}
+                    {icons[name]}
                 </svg>
             );
         };
 
+        // --- CONSTANTES ---
         const CAREERS = [
             { id: "industrial", name: "Ingeniería Civil Industrial", color: "bg-blue-600" },
             { id: "informatica", name: "Ingeniería Civil Informática", color: "bg-green-600" },
@@ -144,31 +109,36 @@
             const [schedules, setSchedules] = useState({});
             const [isSaving, setIsSaving] = useState(false);
 
-            // 1. Autenticación Anónima Obligatoria
+            // 1. Inicialización de Firebase Segura
             useEffect(() => {
-                const initAuth = async () => {
-                    const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    if (token) await auth.signInWithCustomToken(token);
-                    else await auth.signInAnonymously();
-                };
-                initAuth();
-                const unsubscribe = auth.onAuthStateChanged(setUser);
-                return () => unsubscribe();
+                try {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                    const auth = firebase.auth();
+                    const initAuth = async () => {
+                        const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        if (token) await auth.signInWithCustomToken(token);
+                        else await auth.signInAnonymously();
+                    };
+                    initAuth();
+                    return auth.onAuthStateChanged(setUser);
+                } catch (e) { console.error("Firebase Config Error", e); }
             }, []);
 
-            // 2. Sincronización en tiempo real
+            // 2. Sincronización de Datos
             useEffect(() => {
                 if (!user) return;
+                const db = firebase.firestore();
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
                 const path = `artifacts/${appId}/public/data/schedules`;
-                const unsubscribe = db.collection(path).onSnapshot(snap => {
+                return db.collection(path).onSnapshot(snap => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
                     setSchedules(data);
                 });
-                return () => unsubscribe();
             }, [user]);
 
-            // 3. Reloj y Rotación Automática
+            // 3. Reloj y Rotación
             useEffect(() => {
                 const timer = setInterval(() => setCurrentTime(new Date()), 1000);
                 const rotator = setInterval(() => {
@@ -179,34 +149,31 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            // 4. Función de guardado optimizada
-            const handleUpdateEntry = async (careerId, year, day, hIdx, field, value) => {
+            const handleUpdate = async (careerId, year, day, hIdx, field, value) => {
                 const docId = `${careerId}-${year}`;
-                
-                // Actualización local inmediata para que el input no se trabe
+                // Actualización local para rapidez
                 setSchedules(prev => {
-                    const newSchedules = { ...prev };
-                    if (!newSchedules[docId]) newSchedules[docId] = {};
-                    if (!newSchedules[docId][day]) newSchedules[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
-                    const updatedDay = [...newSchedules[docId][day]];
+                    const next = { ...prev };
+                    if (!next[docId]) next[docId] = {};
+                    if (!next[docId][day]) next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
+                    const updatedDay = [...next[docId][day]];
                     updatedDay[hIdx] = { ...updatedDay[hIdx], [field]: value };
-                    newSchedules[docId][day] = updatedDay;
-                    return newSchedules;
+                    next[docId][day] = updatedDay;
+                    return next;
                 });
 
-                // Sincronización diferida con Firestore
+                // Sincronización Firebase
                 setIsSaving(true);
                 try {
+                    const db = firebase.firestore();
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
                     const docRef = db.collection(`artifacts/${appId}/public/data/schedules`).doc(docId);
                     const currentData = schedules[docId] || {};
                     const daySlots = [...(currentData[day] || HOURS.map(h => ({ hour: h, subject: '', room: '' })))];
                     daySlots[hIdx] = { ...daySlots[hIdx], [field]: value };
                     await docRef.set({ slots: { ...currentData, [day]: daySlots } }, { merge: true });
-                } catch (e) {
-                    console.error("Error al guardar:", e);
-                } finally {
-                    setIsSaving(false);
-                }
+                } catch (e) { console.error(e); }
+                setIsSaving(false);
             };
 
             const career = CAREERS[currentCareerIdx];
@@ -214,110 +181,74 @@
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
             return (
-                <div className="flex flex-col min-h-screen">
-                    {/* ENCABEZADO FIJO */}
+                <div className="flex flex-col min-h-screen bg-slate-900">
+                    {/* ENCABEZADO */}
                     <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-6">
-                            <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg ring-2 ring-slate-700 w-24 h-24 shrink-0">
-                                <img 
-                                    src="Logo_UVM.png" 
-                                    alt="Logo UVM" 
-                                    className="max-w-full max-h-full object-contain"
-                                    onError={(e) => { e.target.src = 'https://via.placeholder.com/100x100?text=LOGO+UVM'; }}
-                                />
+                            <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg w-28 h-28 shrink-0">
+                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} />
                             </div>
                             <div>
-                                <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">
-                                    Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales
-                                </h1>
-                                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">SISTEMA DE GESTIÓN HORARIA • UNIVERSIDAD VIÑA DEL MAR</p>
+                                <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales</h1>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mt-2">SISTEMA DE GESTIÓN HORARIA • UNIVERSIDAD VIÑA DEL MAR</p>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-8">
-                            <div className="text-right">
-                                <div className="text-4xl font-mono font-bold text-blue-400 leading-none">
-                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                </div>
-                                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-2">
-                                    {currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </div>
-                            </div>
-                            {isSaving && <div className="animate-spin text-blue-500"><Icon name="Save" size={24} /></div>}
+                        <div className="text-right">
+                            <div className="text-4xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                            <div className="text-[10px] text-slate-500 uppercase font-bold mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                         </div>
                     </header>
 
-                    {/* BANNER CARRERA STICKY */}
+                    {/* BANNER CARRERA */}
                     <div className={`${career.color} py-4 px-8 flex justify-between items-center shadow-lg sticky top-0 z-30 transition-colors duration-1000`}>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all active:scale-95 text-white">
-                            <Icon name="ChevronLeft" size={36}/>
-                        </button>
-                        <div className="text-center">
-                            <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter drop-shadow-md leading-none">{career.name}</h2>
-                            <div className="flex items-center justify-center gap-3 mt-2 opacity-90 uppercase text-[10px] font-bold tracking-widest">
-                                <Icon name="GraduationCap" size={14}/> {selectedYear}º AÑO • CARRERA {currentCareerIdx+1}/8
+                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all text-white"><Icon name="ChevronLeft" size={40}/></button>
+                        <div className="text-center text-white">
+                            <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tighter drop-shadow-md leading-none">{career.name}</h2>
+                            <div className="flex items-center justify-center gap-3 mt-2 opacity-90 uppercase text-xs font-bold tracking-widest">
+                                <Icon name="GraduationCap" size={16}/> {selectedYear}º AÑO • CARRERA {currentCareerIdx+1}/8
                             </div>
                         </div>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all active:scale-95 text-white">
-                            <Icon name="ChevronRight" size={36}/>
-                        </button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all text-white"><Icon name="ChevronRight" size={40}/></button>
                     </div>
 
-                    {/* CONTENIDO PRINCIPAL (FLUYE NATURALMENTE HACIA ABAJO) */}
-                    <main className="flex-1 p-6 md:p-8 bg-slate-900">
-                        <div className="max-w-7xl mx-auto flex flex-col gap-8">
+                    {/* CONTENIDO PRINCIPAL (SCROLL GENERAL) */}
+                    <main className="flex-1 p-6 md:p-10 flex flex-col gap-10">
+                        <div className="max-w-7xl mx-auto w-full flex flex-col gap-8">
                             
-                            {/* SELECTORES CENTRALES */}
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="flex gap-1 bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-xl">
+                            {/* SELECTORES */}
+                            <div className="flex flex-col items-center gap-6">
+                                <div className="flex gap-2 bg-slate-800 p-2 rounded-2xl border border-slate-700 shadow-xl">
                                     {YEARS.map(y => (
-                                        <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
+                                        <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-8 py-3 rounded-xl text-sm font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
                                     ))}
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => setViewMode('daily')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white font-black scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                                        <Icon name="Clock" size={18}/> DIARIO
-                                    </button>
-                                    <button onClick={() => setViewMode('weekly')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white font-black scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                                        <Icon name="Calendar" size={18}/> SEMANAL
-                                    </button>
+                                <div className="flex gap-4">
+                                    <button onClick={() => setViewMode('daily')} className={`px-10 py-3 rounded-xl text-sm font-bold flex items-center gap-3 border transition-all ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Clock" size={20}/> DIARIO</button>
+                                    <button onClick={() => setViewMode('weekly')} className={`px-10 py-3 rounded-xl text-sm font-bold flex items-center gap-3 border transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Calendar" size={20}/> SEMANAL</button>
                                 </div>
                             </div>
 
-                            {/* REJILLA DE HORARIOS */}
-                            <div className="w-full mb-20">
+                            {/* GRILLA DE HORARIOS */}
+                            <div className="w-full mb-12">
                                 {viewMode === 'daily' ? (
                                     <div className="space-y-4 max-w-5xl mx-auto">
-                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.3em] mb-10 text-2xl italic drop-shadow-md">Horario de {currentDayName}</h3>
+                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.4em] mb-10 text-3xl italic">Horario de {currentDayName}</h3>
                                         {HOURS.map((h, i) => {
                                             const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                             return (
-                                                <div key={i} className={`flex items-center p-5 rounded-[2rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[12px] border-blue-500 shadow-2xl scale-[1.01]' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
-                                                    <div className="w-40 text-sm font-mono font-bold text-slate-400 shrink-0">
-                                                        <span className="text-[10px] text-blue-500/60 block uppercase font-black mb-1">Clave {i+1}</span>{h}
+                                                <div key={i} className={`flex items-center p-6 rounded-[2.5rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[15px] border-blue-500 shadow-2xl' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
+                                                    <div className="w-44 text-lg font-mono font-bold text-slate-400 shrink-0 leading-none">
+                                                        <span className="text-xs text-blue-500 block uppercase mb-2 font-black">Clave {i+1}</span>{h}
                                                     </div>
-                                                    
                                                     {isAdminMode ? (
-                                                        <div className="flex-1 flex gap-4 ml-8">
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Asignatura..." 
-                                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-blue-500 outline-none transition-all shadow-inner"
-                                                                value={slot.subject}
-                                                                onChange={e => handleUpdateEntry(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)}
-                                                            />
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Aula" 
-                                                                className="w-32 bg-slate-950 border border-slate-700 rounded-xl p-3 text-blue-400 text-center font-bold focus:border-blue-500 outline-none"
-                                                                value={slot.room}
-                                                                onChange={e => handleUpdateEntry(career.id, selectedYear, currentDayName, i, 'room', e.target.value)}
-                                                            />
+                                                        <div className="flex-1 flex gap-5 ml-10">
+                                                            <input type="text" placeholder="Asignatura..." className="input-admin text-lg font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
+                                                            <input type="text" placeholder="Aula" className="input-admin w-40 text-center text-blue-400 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
                                                         </div>
                                                     ) : (
-                                                        <div className="flex-1 ml-10 overflow-hidden">
-                                                            <div className="text-3xl font-black truncate drop-shadow-lg uppercase tracking-tight">{slot.subject || "BLOQUE DISPONIBLE"}</div>
-                                                            {slot.subject && <div className="text-blue-400 font-bold uppercase text-sm mt-1 tracking-widest flex items-center gap-2"><Icon name="Monitor" size={14}/> {slot.room}</div>}
+                                                        <div className="flex-1 ml-12 overflow-hidden">
+                                                            <div className="text-4xl font-black truncate drop-shadow-lg tracking-tight uppercase">{slot.subject || "BLOQUE LIBRE"}</div>
+                                                            {slot.subject && <div className="text-blue-400 font-bold uppercase text-lg mt-2 tracking-widest flex items-center gap-2"><Icon name="Monitor" size={18}/> {slot.room}</div>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -325,18 +256,18 @@
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto pb-4">
-                                        <div className="grid grid-cols-6 gap-3 min-w-[1100px]">
+                                    <div className="overflow-x-auto pb-6">
+                                        <div className="grid grid-cols-6 gap-4 min-w-[1200px]">
                                             {DAYS.map(day => (
-                                                <div key={day} className="flex flex-col gap-3">
+                                                <div key={day} className="flex flex-col gap-4">
                                                     <div className={`p-4 rounded-2xl text-center font-black text-sm uppercase tracking-tighter shadow-xl ${day === currentDayName ? 'bg-blue-600 shadow-2xl scale-105' : 'bg-slate-700 text-slate-400'}`}>{day}</div>
                                                     {HOURS.map((h, i) => {
                                                         const slot = (currentSchedule[day] || [])[i] || { subject: '', room: '' };
                                                         return (
-                                                            <div key={i} className={`p-3.5 rounded-2xl flex-1 min-h-[90px] flex flex-col justify-center border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-1 ring-white/5 shadow-xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
-                                                                <div className="text-[9px] font-mono text-slate-500 mb-2 font-bold uppercase leading-none border-b border-slate-700/50 pb-1">Clave {i+1}</div>
-                                                                <div className="text-[11px] font-black leading-tight line-clamp-3 uppercase tracking-tighter text-white/90">{slot.subject}</div>
-                                                                {slot.subject && <div className="text-[10px] text-blue-400 font-bold mt-2 uppercase italic truncate leading-none">{slot.room}</div>}
+                                                            <div key={i} className={`p-4 rounded-3xl flex-1 min-h-[100px] flex flex-col justify-center border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
+                                                                <div className="text-[10px] font-mono text-slate-500 mb-2 font-black uppercase border-b border-slate-700/50 pb-1">Clave {i+1}</div>
+                                                                <div className="text-xs font-black leading-tight line-clamp-3 uppercase tracking-tighter text-white/90">{slot.subject}</div>
+                                                                {slot.subject && <div className="text-[10px] text-blue-400 font-bold mt-2 uppercase italic truncate">{slot.room}</div>}
                                                             </div>
                                                         );
                                                     })}
@@ -349,40 +280,35 @@
                         </div>
                     </main>
 
-                    {/* PIE DE PÁGINA (CONECTADO AL FLUJO) */}
-                    <footer className="bg-slate-800 border-t border-slate-700 p-6 px-8 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest shrink-0">
-                        <div className="flex gap-4">
-                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-3 px-6 py-3 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
-                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={16}/> {isAutoPlaying ? 'AUTO ON' : 'AUTO OFF'}
+                    {/* PIE DE PÁGINA */}
+                    <footer className="bg-slate-800 border-t border-slate-700 p-8 px-10 flex justify-between items-center text-xs font-bold uppercase tracking-widest shrink-0 z-30">
+                        <div className="flex gap-6">
+                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-4 px-8 py-4 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-2xl' : 'bg-slate-700 border-slate-600'}`}>
+                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={20}/> {isAutoPlaying ? 'ROTA AUTOMÁTICAMENTE' : 'ROTACIÓN DETENIDA'}
                             </button>
-                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-3 px-6 py-3 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
-                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={16}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMINISTRADOR'}
+                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-4 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600'}`}>
+                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={20}/> {isAdminMode ? 'SALIR DE GESTIÓN' : 'MODO ADMINISTRADOR'}
                             </button>
                         </div>
-                        <div className="flex items-center gap-4 text-slate-500 italic uppercase">
-                            <Icon name="Monitor" size={18}/> SINCRONIZACIÓN CLOUD • FINCA@2026
+                        <div className="flex flex-col items-end gap-3 text-slate-500 italic uppercase">
+                            <div className="flex items-center gap-3">
+                                {isSaving && <div className="animate-spin text-blue-500"><Icon name="Monitor" size={18}/></div>}
+                                <Icon name="Monitor" size={24}/> ACTUALIZACIÓN EN TIEMPO REAL • FINCA@2026
+                            </div>
                         </div>
                     </footer>
 
-                    {/* MODAL DE CONTRASEÑA */}
+                    {/* MODAL PASSWORD */}
                     {showPassModal && (
-                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-6 text-white">
-                            <div className="bg-slate-800 border border-slate-700 p-12 rounded-[3.5rem] shadow-[0_0_100px_rgba(0,0,0,0.8)] max-w-md w-full text-center">
-                                <div className="mb-8 text-blue-500 flex justify-center"><Icon name="Lock" size={64} /></div>
-                                <h3 className="text-2xl font-black uppercase mb-4 tracking-tight leading-none">Acceso Restringido</h3>
-                                <p className="text-slate-400 text-sm font-medium mb-10 leading-relaxed px-4">Ingrese la clave institucional para habilitar la edición de contenidos.</p>
-                                <input 
-                                    type="password" 
-                                    placeholder="CONTRASEÑA" 
-                                    className={`w-full bg-slate-900 border-4 ${passError ? 'border-red-500 animate-shake' : 'border-slate-700'} rounded-[2rem] p-6 text-center text-4xl font-black mb-8 outline-none focus:border-blue-500 tracking-[0.5em] uppercase text-white shadow-inner`} 
-                                    value={passwordInput} 
-                                    onChange={e => setPasswordInput(e.target.value)} 
-                                    onKeyDown={e => e.key === 'Enter' && (passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true))} 
-                                    autoFocus 
-                                />
+                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-8 text-white">
+                            <div className="bg-slate-800 border border-slate-700 p-12 rounded-[3.5rem] shadow-2xl max-w-lg w-full text-center">
+                                <div className="mb-10 text-blue-500 flex justify-center"><Icon name="Lock" size={70} /></div>
+                                <h3 className="text-3xl font-black uppercase mb-4">Acceso de Gestión</h3>
+                                <p className="text-slate-400 text-sm mb-12 px-6">Introduzca la contraseña para habilitar la edición de contenidos.</p>
+                                <input type="password" placeholder="CLAVE" className={`w-full bg-slate-900 border-4 ${passError ? 'border-red-500 animate-shake' : 'border-slate-700'} rounded-3xl p-6 text-center text-5xl font-black mb-10 outline-none focus:border-blue-500 tracking-[0.5em] text-white`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true))} autoFocus />
                                 <div className="flex gap-4">
-                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-5 rounded-2xl uppercase font-black text-xs tracking-widest transition-all">Cerrar</button>
-                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-5 rounded-2xl uppercase font-black text-xs tracking-widest shadow-2xl shadow-blue-600/30 transition-all">Entrar</button>
+                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-6 rounded-2xl font-black text-white active:scale-95">Cerrar</button>
+                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-6 rounded-2xl font-black text-white shadow-2xl active:scale-95">Acceder</button>
                                 </div>
                             </div>
                         </div>
