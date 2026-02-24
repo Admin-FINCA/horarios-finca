@@ -57,6 +57,7 @@
             width: 100%;
             font-size: 11px;
             outline: none;
+            min-height: 40px;
         }
         .input-admin-sm:focus { border-color: #3b82f6; background: rgba(30, 41, 59, 1); }
 
@@ -78,7 +79,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, Fragment, useRef } = React;
+        const { useState, useEffect, Fragment, useRef, useCallback } = React;
 
         // --- CONSTANTES ---
         const CAREERS = [
@@ -101,7 +102,7 @@
             "18:20 - 19:05", "19:05 - 19:50", "20:00 - 20:45"
         ];
 
-        // --- ICONOS SVG NATIVOS ---
+        // --- ICONOS ---
         const Icon = ({ name, size = 24, className = "" }) => {
             const icons = {
                 Clock: <path d="M12 6v6l4 2" />,
@@ -113,7 +114,8 @@
                 Lock: <Fragment><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Fragment>,
                 GraduationCap: <Fragment><path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" /></Fragment>,
                 Monitor: <Fragment><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></Fragment>,
-                Save: <Fragment><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></Fragment>
+                Save: <Fragment><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></Fragment>,
+                WifiOff: <Fragment><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.58 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Fragment>
             };
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -136,46 +138,46 @@
             const [schedules, setSchedules] = useState({});
             const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'pending', 'saving'
             const [isSystemReady, setIsSystemReady] = useState(false);
+            const [isOffline, setIsOffline] = useState(false);
 
             const saveTimeoutRef = useRef(null);
-            const firebaseInitRef = useRef(false);
 
-            // 1. INICIALIZACIÓN DE FIREBASE
+            // 1. INICIALIZACIÓN FIREBASE
             useEffect(() => {
                 const initApp = async () => {
-                    if (firebaseInitRef.current) return;
-                    firebaseInitRef.current = true;
-
                     try {
                         const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-                        if (configStr) {
-                            const config = JSON.parse(configStr);
-                            if (!firebase.apps.length) firebase.initializeApp(config);
-                            
-                            const authInstance = firebase.auth();
-                            const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                            
-                            if (token) await authInstance.signInWithCustomToken(token);
-                            else await authInstance.signInAnonymously();
-
-                            authInstance.onAuthStateChanged((u) => {
-                                setUser(u);
-                                setIsSystemReady(true);
-                            });
-                        } else {
+                        if (!configStr) {
+                            setIsOffline(true);
                             setIsSystemReady(true);
+                            return;
                         }
+
+                        const config = JSON.parse(configStr);
+                        if (!firebase.apps.length) firebase.initializeApp(config);
+                        
+                        const authInstance = firebase.auth();
+                        const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        
+                        if (token) await authInstance.signInWithCustomToken(token);
+                        else await authInstance.signInAnonymously();
+
+                        authInstance.onAuthStateChanged((u) => {
+                            setUser(u);
+                            setIsSystemReady(true);
+                        });
                     } catch (e) {
-                        console.error("Firebase init failed:", e);
+                        console.error("Firebase fail:", e);
+                        setIsOffline(true);
                         setIsSystemReady(true);
                     }
                 };
                 initApp();
             }, []);
 
-            // 2. SINCRONIZACIÓN DE DATOS (REGLA 1)
+            // 2. ESCUCHA DE DATOS (REGLA 1)
             useEffect(() => {
-                if (!isSystemReady || !user) return;
+                if (!isSystemReady || !user || isOffline) return;
                 const db = firebase.firestore();
                 const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
                 const path = `/artifacts/${appId}/public/data/schedules`;
@@ -184,10 +186,9 @@
                     const data = {};
                     snapshot.forEach(doc => { data[doc.id] = doc.data().slots; });
                     setSchedules(prev => ({...prev, ...data}));
-                }, (error) => console.error("Firestore Error:", error));
-                
+                });
                 return () => unsubscribe();
-            }, [isSystemReady, user]);
+            }, [isSystemReady, user, isOffline]);
 
             // 3. RELOJ Y ROTACIÓN
             useEffect(() => {
@@ -200,16 +201,17 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            // 4. FUNCIÓN DE GUARDADO MANUAL (DISQUETE)
-            const persistToCloud = async () => {
-                if (!user || !isSystemReady || saveStatus === 'saving') return;
+            // 4. FUNCIÓN DE GUARDADO PERSISTENTE
+            const persistToCloud = useCallback(async (forcedData = null) => {
+                if (isOffline) return;
+                if (!user || !isSystemReady || (saveStatus === 'saving' && !forcedData)) return;
                 
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
-                const currentData = schedules[docId];
+                const dataToSave = forcedData || schedules[docId];
 
-                if (!currentData) {
+                if (!dataToSave) {
                     setSaveStatus('saved');
                     return;
                 }
@@ -219,33 +221,36 @@
                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
                     const docPath = `/artifacts/${appId}/public/data/schedules/${docId}`;
                     
-                    await db.doc(docPath).set({ slots: currentData }, { merge: true });
+                    await db.doc(docPath).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
+                    console.log("Datos guardados en la nube exitosamente.");
                 } catch (e) {
-                    console.error("Save failed:", e);
+                    console.error("Fallo al guardar:", e);
                     setSaveStatus('pending');
                 }
-            };
+            }, [user, isSystemReady, isOffline, currentCareerIdx, selectedYear, schedules, saveStatus]);
 
-            // 5. ACTUALIZACIÓN LOCAL (UI) + AUTO-GUARDADO RESPALDO
+            // 5. MANEJO DE CAMBIOS
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
+                if (!isAdminMode) return;
                 const docId = `${careerId}-${year}`;
+                
                 setSaveStatus('pending');
 
                 setSchedules(prev => {
-                    const next = { ...prev };
+                    const next = JSON.parse(JSON.stringify(prev)); // Deep clone para evitar mutaciones
                     if (!next[docId]) next[docId] = {};
-                    if (!next[docId][day]) next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
+                    if (!next[docId][day]) {
+                        next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
+                    }
+                    next[docId][day][hIdx][field] = value;
                     
-                    const updatedDay = [...next[docId][day]];
-                    updatedDay[hIdx] = { ...updatedDay[hIdx], [field]: value };
-                    next[docId][day] = updatedDay;
+                    // Auto-guardado debounce (5s)
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = setTimeout(() => persistToCloud(next[docId]), 5000);
+                    
                     return next;
                 });
-
-                // Auto-guardado tras 5 segundos de inactividad
-                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = setTimeout(persistToCloud, 5000);
             };
 
             const career = CAREERS[currentCareerIdx];
@@ -257,7 +262,7 @@
                     <div className="flex items-center justify-center min-h-screen bg-slate-950">
                         <div className="text-center">
                             <div className="animate-spin text-blue-500 mb-6 flex justify-center"><Icon name="Monitor" size={64}/></div>
-                            <p className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse">Sincronizando Sistema UVM...</p>
+                            <p className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse">Cargando Facultad UVM...</p>
                         </div>
                     </div>
                 );
@@ -269,30 +274,37 @@
                     <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-6">
                             <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg w-28 h-28 shrink-0">
-                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} />
+                                <img 
+                                    src="Logo_UVM.png" 
+                                    alt="Logo UVM" 
+                                    className="max-w-full max-h-full object-contain" 
+                                    onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} 
+                                />
                             </div>
                             <div>
                                 <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales</h1>
                                 <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mt-2 italic text-xs">Gestión Centralizada • Universidad Viña del Mar</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-8">
+                        <div className="text-right flex items-center gap-8">
                             <div className="text-right">
                                 <div className="text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                 <div className="text-[11px] text-slate-500 uppercase font-black mt-3 tracking-[0.2em]">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             
-                            {/* BOTÓN DISQUETE - GUARDADO MANUAL */}
+                            {/* BOTÓN DISQUETE - GUARDADO MANUAL PRIORITARIO */}
                             <button 
-                                onClick={persistToCloud}
-                                className={`transition-all duration-300 p-5 rounded-2xl border-4 active:scale-95 ${
-                                    saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
+                                onClick={() => persistToCloud()}
+                                disabled={isOffline || saveStatus === 'saving'}
+                                className={`transition-all duration-300 p-5 rounded-2xl border-4 active:scale-95 flex items-center justify-center ${
+                                    isOffline ? 'text-gray-600 border-gray-800 cursor-not-allowed' :
+                                    saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40 hover:opacity-100' : 
                                     saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin' : 
-                                    'text-yellow-500 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.4)] animate-bounce'
+                                    'text-yellow-500 border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] animate-bounce cursor-pointer'
                                 }`}
-                                title={saveStatus === 'pending' ? "Presione para guardar ahora" : "Datos sincronizados"}
+                                title={isOffline ? "Sin conexión a base de datos" : saveStatus === 'pending' ? "GUARDAR CAMBIOS AHORA" : "Sincronizado"}
                             >
-                                <Icon name="Save" size={40} />
+                                <Icon name={isOffline ? "WifiOff" : "Save"} size={40} />
                             </button>
                         </div>
                     </header>
@@ -312,7 +324,6 @@
                     <main className="flex-1 p-6 md:p-10 flex flex-col gap-10">
                         <div className="max-w-[1400px] mx-auto w-full flex flex-col gap-10">
                             
-                            {/* SELECTORES */}
                             <div className="flex flex-col items-center gap-6">
                                 <div className="flex gap-2 bg-slate-800 p-2.5 rounded-3xl border border-slate-700 shadow-2xl">
                                     {YEARS.map(y => (
@@ -340,7 +351,7 @@
                                                         <div className="flex-1 flex gap-6 ml-10">
                                                             <textarea 
                                                                 rows="2"
-                                                                placeholder="Asignatura..." 
+                                                                placeholder="Nombre Asignatura..." 
                                                                 className="input-admin text-xl font-black resize-none" 
                                                                 value={slot.subject} 
                                                                 onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} 
@@ -381,8 +392,8 @@
                                                     {DAYS.map(day => {
                                                         const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
                                                         return (
-                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[180px] h-auto flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
-                                                                <div className="text-[9px] font-mono text-slate-500 mb-2 font-black uppercase leading-none border-b border-slate-700/50 pb-2 italic">CLAVE {hIdx+1}</div>
+                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[180px] h-full flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
+                                                                <div className="text-[9px] font-mono text-slate-500 mb-2 font-black uppercase leading-none border-b border-slate-700/50 pb-2 italic text-[8px]">CLAVE {hIdx+1}</div>
                                                                 
                                                                 {isAdminMode ? (
                                                                     <div className="flex flex-col gap-2 mt-1">
@@ -403,10 +414,10 @@
                                                                     </div>
                                                                 ) : (
                                                                     <Fragment>
-                                                                        <div className="text-[14px] font-black leading-tight uppercase tracking-tight text-white/90 mb-3 subject-text font-black">
+                                                                        <div className="text-[13px] font-black leading-tight uppercase tracking-tight text-white/90 mb-3 subject-text font-black">
                                                                             {slot.subject}
                                                                         </div>
-                                                                        {slot.subject && <div className="text-[11px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none font-black">SALA {slot.room}</div>}
+                                                                        {slot.subject && <div className="text-[10px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none font-black">SALA {slot.room}</div>}
                                                                     </Fragment>
                                                                 )}
                                                             </div>
@@ -427,16 +438,20 @@
                             <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
                                 <Icon name={isAutoPlaying ? "Pause" : "Play"} size={24}/> {isAutoPlaying ? 'ROTACIÓN ACTIVADA' : 'ROTACIÓN PAUSADA'}
                             </button>
-                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
+                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
                                 <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={24}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMINISTRADOR'}
                             </button>
                         </div>
                         <div className="flex flex-col items-end gap-3 text-slate-500 italic uppercase">
                             <div className="flex items-center gap-4 bg-slate-900/50 px-5 py-2 rounded-full">
-                                <span className={`${saveStatus === 'saved' ? 'text-green-500 font-black' : 'text-yellow-500 font-black'} font-black text-[10px]`}>
-                                    {saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 
-                                     saveStatus === 'saving' ? 'PROCESANDO EN NUBE...' : 'MODIFICACIONES PENDIENTES - PULSE EL DISQUETE'}
-                                </span>
+                                {isOffline ? (
+                                    <span className="text-red-500 font-black text-[10px] animate-pulse">MODO OFFLINE - SIN BASE DE DATOS</span>
+                                ) : (
+                                    <span className={`${saveStatus === 'saved' ? 'text-green-400' : 'text-yellow-400'} font-black text-[10px]`}>
+                                        {saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 
+                                         saveStatus === 'saving' ? 'PROCESANDO EN NUBE...' : 'MODIFICACIONES PENDIENTES - PULSE EL DISQUETE'}
+                                    </span>
+                                )}
                                 <Icon name="Monitor" size={24}/> FINCA 2026
                             </div>
                         </div>
@@ -445,7 +460,7 @@
                     {/* MODAL PASSWORD */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-8 text-white text-center">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-16 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10 font-black">
+                            <div className="bg-slate-800 border-2 border-slate-700 p-12 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10 font-black">
                                 <div className="mb-12 text-blue-500 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.5)]"><Icon name="Lock" size={100} /></div>
                                 <h3 className="text-4xl font-black uppercase mb-6 tracking-tighter">Acceso Institucional</h3>
                                 <p className="text-slate-400 text-lg mb-14 px-8 leading-relaxed font-medium">Ingrese la contraseña para habilitar la edición de contenidos de la Facultad.</p>
