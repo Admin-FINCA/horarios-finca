@@ -14,7 +14,7 @@
     <!-- Firebase SDK (Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
@@ -63,6 +63,14 @@
 
     <script type="text/babel">
         const { useState, useEffect, Fragment } = React;
+
+        // --- CONFIGURACIÓN GLOBAL ---
+        // Se inicializan fuera para asegurar disponibilidad global
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const firebaseApp = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
 
         // --- ICONOS SVG NATIVOS ---
         const Icon = ({ name, size = 24, className = "" }) => {
@@ -120,33 +128,39 @@
             const [schedules, setSchedules] = useState({});
             const [isSaving, setIsSaving] = useState(false);
 
+            // 1. AUTENTICACIÓN (REGLA 3)
             useEffect(() => {
-                try {
-                    const firebaseConfig = JSON.parse(__firebase_config);
-                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-                    const auth = firebase.auth();
-                    const initAuth = async () => {
+                const initAuth = async () => {
+                    try {
                         const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                        if (token) await auth.signInWithCustomToken(token);
-                        else await auth.signInAnonymously();
-                    };
-                    initAuth();
-                    return auth.onAuthStateChanged(setUser);
-                } catch (e) { console.error("Firebase Config Error", e); }
+                        if (token) {
+                            await auth.signInWithCustomToken(token);
+                        } else {
+                            await auth.signInAnonymously();
+                        }
+                    } catch (e) { console.error("Error Autenticación:", e); }
+                };
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged(setUser);
+                return () => unsubscribe();
             }, []);
 
+            // 2. SINCRONIZACIÓN DE DATOS (REGLA 1)
             useEffect(() => {
                 if (!user) return;
-                const db = firebase.firestore();
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
-                const path = `artifacts/${appId}/public/data/schedules`;
-                return db.collection(path).onSnapshot(snap => {
+                // Ruta pública estricta
+                const path = `/artifacts/${appId}/public/data/schedules`;
+                const unsubscribe = db.collection(path).onSnapshot((snapshot) => {
                     const data = {};
-                    snap.forEach(doc => data[doc.id] = doc.data().slots);
+                    snapshot.forEach(doc => { data[doc.id] = doc.data().slots; });
                     setSchedules(data);
+                }, (error) => {
+                    console.error("Error Lectura Firestore:", error);
                 });
+                return () => unsubscribe();
             }, [user]);
 
+            // 3. RELOJ Y ROTACIÓN
             useEffect(() => {
                 const timer = setInterval(() => setCurrentTime(new Date()), 1000);
                 const rotator = setInterval(() => {
@@ -157,8 +171,12 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
+            // 4. GUARDADO PERSISTENTE (REGLA 1 Y 3)
             const handleUpdate = async (careerId, year, day, hIdx, field, value) => {
+                if (!user || !isAdminMode) return;
                 const docId = `${careerId}-${year}`;
+                
+                // Actualización optimista (UI inmediata)
                 setSchedules(prev => {
                     const next = { ...prev };
                     if (!next[docId]) next[docId] = {};
@@ -171,15 +189,20 @@
 
                 setIsSaving(true);
                 try {
-                    const db = firebase.firestore();
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
-                    const docRef = db.collection(`artifacts/${appId}/public/data/schedules`).doc(docId);
+                    // Ruta estricta de escritura
+                    const docRef = db.doc(`/artifacts/${appId}/public/data/schedules/${docId}`);
                     const currentData = schedules[docId] || {};
                     const daySlots = [...(currentData[day] || HOURS.map(h => ({ hour: h, subject: '', room: '' })))];
                     daySlots[hIdx] = { ...daySlots[hIdx], [field]: value };
-                    await docRef.set({ slots: { ...currentData, [day]: daySlots } }, { merge: true });
-                } catch (e) { console.error(e); }
-                setIsSaving(false);
+                    
+                    await docRef.set({ 
+                        slots: { ...currentData, [day]: daySlots } 
+                    }, { merge: true });
+                } catch (e) {
+                    console.error("Error Guardado Permanente:", e);
+                } finally {
+                    setIsSaving(false);
+                }
             };
 
             const career = CAREERS[currentCareerIdx];
@@ -323,7 +346,7 @@
 
                     {/* MODAL PASSWORD */}
                     {showPassModal && (
-                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-8 text-white">
+                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center z-[100] p-8 text-white">
                             <div className="bg-slate-800 border border-slate-700 p-12 rounded-[3.5rem] shadow-2xl max-w-lg w-full text-center">
                                 <div className="mb-10 text-blue-500 flex justify-center"><Icon name="Lock" size={70} /></div>
                                 <h3 className="text-3xl font-black uppercase mb-4 tracking-tight leading-none">Acceso de Gestión</h3>
