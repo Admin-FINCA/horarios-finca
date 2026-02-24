@@ -1,0 +1,285 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Clock, Calendar, ChevronRight, ChevronLeft, 
+  Pause, Play, Monitor, Edit3, Save, Trash2, CheckCircle, AlertCircle, GraduationCap, Lock, X
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, doc, onSnapshot, 
+  setDoc, getDoc 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
+} from 'firebase/auth';
+
+// --- CONFIGURACIÓN DE FIREBASE ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'ingenieria-tv-app';
+
+// --- CONSTANTES ---
+const CAREERS = [
+  { id: "sistemas", name: "Ingeniería Civil Industrial", color: "bg-blue-600" },
+  { id: "industrial", name: "Ingeniería Civil Informática", color: "bg-green-600" },
+  { id: "civil", name: "Ingeniería Comercial", color: "bg-orange-600" },
+  { id: "electronica", name: "Ingeniería en Construcción", color: "bg-red-600" },
+  { id: "mecanica", name: "Ingeniería en Prevención de Riesgos y Gestión Ambiental", color: "bg-gray-700" },
+  { id: "ambiental", name: "Agronomía", color: "bg-emerald-600" },
+  { id: "quimica", name: "Contador Auditor", color: "bg-purple-600" },
+];
+
+const YEARS = [
+  { id: "1", label: "1er año" },
+  { id: "2", label: "2do año" },
+  { id: "3", label: "3er año" },
+  { id: "4", label: "4to año" },
+  { id: "5", label: "5to año" },
+];
+
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+const HOURS = [
+  "08:20 - 09:05", "09:05 - 09:50", "10:00 - 10:45", "10:45 - 11:30",
+  "11:40 - 12:25", "12:25 - 13:10", "13:20 - 14:05", "14:05 - 14:50",
+  "15:00 - 15:45", "15:45 - 16:30", "16:40 - 17:25", "17:25 - 18:10",
+  "18:20 - 19:05", "19:05 - 19:50", "20:00 - 20:45"
+];
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [currentCareerIdx, setCurrentCareerIdx] = useState(0);
+  const [selectedYear, setSelectedYear] = useState("1");
+  const [viewMode, setViewMode] = useState('daily');
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  
+  // Estados para Seguridad y Admin
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passError, setPassError] = useState(false);
+
+  const [schedules, setSchedules] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 1. AUTENTICACIÓN
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error(err); }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // 2. DATOS
+  useEffect(() => {
+    if (!user) return;
+    const schedulesCol = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
+    const unsubscribe = onSnapshot(schedulesCol, (snapshot) => {
+      const data = {};
+      snapshot.forEach(doc => { data[doc.id] = doc.data().slots; });
+      setSchedules(data);
+    }, (error) => console.error(error));
+    return () => unsubscribe();
+  }, [user]);
+
+  // 3. RELOJ Y CARRUSEL
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let interval;
+    if (isAutoPlaying && !isAdminMode && !showPassModal) {
+      interval = setInterval(() => {
+        setCurrentCareerIdx((prev) => (prev + 1) % CAREERS.length);
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [isAutoPlaying, isAdminMode, showPassModal]);
+
+  // 4. FUNCIONES
+  const saveSchedule = async (careerId, year, day, hourIndex, subject, room) => {
+    if (!user || !isAdminMode) return;
+    setIsSaving(true);
+    const docId = `${careerId}-${year}`;
+    try {
+      const careerRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', docId);
+      const currentData = schedules[docId] || {};
+      const updatedDaySlots = [...(currentData[day] || HOURS.map(h => ({ hour: h, subject: '', room: '' })))];
+      updatedDaySlots[hourIndex] = { hour: HOURS[hourIndex], subject, room };
+      await setDoc(careerRef, { slots: { ...currentData, [day]: updatedDaySlots } }, { merge: true });
+    } catch (err) { console.error(err); } finally { setIsSaving(false); }
+  };
+
+  const handleAdminToggle = () => {
+    if (isAdminMode) {
+      setIsAdminMode(false);
+    } else {
+      setShowPassModal(true);
+      setPassError(false);
+      setPasswordInput('');
+    }
+  };
+
+  const verifyPassword = () => {
+    if (passwordInput === 'FINCA@2026') {
+      setIsAdminMode(true);
+      setShowPassModal(false);
+      setPassError(false);
+    } else {
+      setPassError(true);
+    }
+  };
+
+  const currentCareer = CAREERS[currentCareerIdx];
+  const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
+  const careerData = schedules[`${currentCareer.id}-${selectedYear}`] || {};
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white font-sans overflow-hidden flex flex-col">
+      {/* HEADER */}
+      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shadow-2xl relative z-10">
+        <div className="flex items-center gap-6">
+          <div className="bg-white p-2 rounded-lg shadow-inner shrink-0">
+             <Monitor size={32} className="text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black uppercase tracking-tight leading-none">Facultad de Ingeniería</h1>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Gestión Centralizada • 15 Claves</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6 text-right">
+          <div>
+            <div className="text-3xl font-mono font-bold text-blue-400 leading-none">
+              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+            <div className="text-slate-500 uppercase font-bold text-[9px] mt-1 tracking-widest">
+              {currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+          </div>
+          {isSaving && <div className="animate-spin text-blue-500"><Save size={20} /></div>}
+        </div>
+      </header>
+
+      {/* INDICADOR DE CARRERA */}
+      <div className={`${currentCareer.color} py-3 px-4 flex justify-between items-center transition-colors duration-1000 shadow-lg relative z-0 shrink-0`}>
+        <button onClick={() => { setCurrentCareerIdx(prev => (prev - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false); }} className="p-1.5 hover:bg-black/20 rounded-full"><ChevronLeft size={24} /></button>
+        <div className="text-center">
+          <h2 className="text-3xl font-black drop-shadow-md uppercase tracking-tighter leading-none">{currentCareer.name}</h2>
+          <div className="flex items-center justify-center gap-2 mt-1">
+             <GraduationCap size={12} className="opacity-70" />
+             <span className="text-[9px] font-bold opacity-70 uppercase tracking-[0.3em]">Nivel {selectedYear}º • Carrera {currentCareerIdx + 1}/7</span>
+          </div>
+        </div>
+        <button onClick={() => { setCurrentCareerIdx(prev => (prev + 1) % CAREERS.length); setIsAutoPlaying(false); }} className="p-1.5 hover:bg-black/20 rounded-full"><ChevronRight size={24} /></button>
+      </div>
+
+      <main className="flex-1 p-4 md:p-6 overflow-hidden bg-slate-900 flex flex-col gap-4">
+        <div className="flex flex-col items-center gap-3 shrink-0">
+          <div className="flex justify-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700 shadow-lg">
+            {YEARS.map((year) => (
+              <button key={year.id} onClick={() => { setSelectedYear(year.id); setIsAutoPlaying(false); }}
+                className={`px-4 py-1.5 rounded-lg font-black text-xs transition-all uppercase tracking-wider ${selectedYear === year.id ? 'bg-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>
+                {year.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-center gap-3">
+            <button onClick={() => setViewMode('daily')} className={`px-5 py-1.5 rounded-lg font-bold text-xs transition-all flex items-center gap-2 ${viewMode === 'daily' ? 'bg-white text-slate-900 shadow-lg' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}><Clock size={14} /> DIARIO</button>
+            <button onClick={() => setViewMode('weekly')} className={`px-5 py-1.5 rounded-lg font-bold text-xs transition-all flex items-center gap-2 ${viewMode === 'weekly' ? 'bg-white text-slate-900 shadow-lg' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}><Calendar size={14} /> SEMANAL</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto rounded-2xl bg-slate-800/40 border border-slate-700/50 p-4 shadow-inner custom-scrollbar">
+          {viewMode === 'daily' ? (
+            <div className="max-w-4xl mx-auto space-y-2 pb-4">
+              <div className="flex items-center gap-4 mb-4"><div className="h-px flex-1 bg-slate-700"></div><h3 className="text-lg font-black text-blue-400 uppercase tracking-widest">{currentDayName}</h3><div className="h-px flex-1 bg-slate-700"></div></div>
+              {HOURS.map((hour, idx) => {
+                const slot = careerData[currentDayName]?.[idx] || { subject: '', room: '' };
+                return (
+                  <div key={idx} className={`flex items-center p-3 rounded-xl transition-all ${slot.subject ? 'bg-slate-700 border-l-4 border-blue-500 shadow-lg' : 'opacity-20 border border-dashed border-slate-700'}`}>
+                    <div className="w-28 text-sm font-mono font-bold text-slate-400 shrink-0"><span className="text-[10px] text-slate-500 block">Clave {idx + 1}</span>{hour}</div>
+                    {isAdminMode ? (
+                      <div className="flex-1 flex gap-3">
+                        <input type="text" placeholder="Asignatura..." className="flex-1 bg-slate-900 border border-slate-600 rounded-lg p-2 text-xs text-white" value={slot.subject} onChange={(e) => saveSchedule(currentCareer.id, selectedYear, currentDayName, idx, e.target.value, slot.room)} />
+                        <input type="text" placeholder="Aula" className="w-24 bg-slate-900 border border-slate-600 rounded-lg p-2 text-xs text-blue-400" value={slot.room} onChange={(e) => saveSchedule(currentCareer.id, selectedYear, currentDayName, idx, slot.subject, e.target.value)} />
+                      </div>
+                    ) : (
+                      <div className="flex-1 ml-4 overflow-hidden"><div className="text-xl font-black truncate">{slot.subject || "Libre"}</div>{slot.subject && <div className="text-blue-400 font-bold uppercase text-xs">{slot.room}</div>}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-6 gap-2 min-h-full min-w-[800px]">
+              {DAYS.map(day => (
+                <div key={day} className="flex flex-col gap-1.5">
+                  <div className={`p-1.5 rounded-lg text-center font-black text-[9px] uppercase ${day === currentDayName ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-400'}`}>{day}</div>
+                  {HOURS.map((hour, idx) => {
+                    const slot = careerData[day]?.[idx] || { subject: '', room: '' };
+                    return (
+                      <div key={idx} className={`p-1.5 rounded-lg flex-1 min-h-[50px] flex flex-col justify-center border ${slot.subject ? 'bg-slate-700 border-slate-600' : 'bg-slate-800/10 opacity-30 border-slate-800'}`}>
+                        <div className="text-[7px] font-mono text-slate-500 mb-0.5 leading-none">C{idx+1}</div>
+                        <div className="text-[9px] font-bold leading-tight line-clamp-2">{slot.subject || ""}</div>
+                        {slot.subject && <div className="text-[8px] text-blue-400 font-bold mt-1 uppercase truncate leading-none">{slot.room}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="bg-slate-800/50 p-3 border-t border-slate-700 flex justify-between items-center shrink-0">
+        <div className="flex gap-3">
+          <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase border ${isAutoPlaying ? 'bg-green-500/10 border-green-500 text-green-500' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
+            {isAutoPlaying ? <Pause size={12} /> : <Play size={12} />} {isAutoPlaying ? 'Auto On' : 'Auto Off'}
+          </button>
+          <button onClick={handleAdminToggle} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase border transition-all ${isAdminMode ? 'bg-red-500 border-red-400 text-white' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
+            {isAdminMode ? <X size={12} /> : <Lock size={12} />} {isAdminMode ? 'Salir Admin' : 'Modo Admin'}
+          </button>
+        </div>
+        <div className="text-[9px] text-slate-600 font-bold uppercase tracking-widest">Sincronización Cloud Activada • FINCA 2026</div>
+      </footer>
+
+      {/* MODAL DE CONTRASEÑA */}
+      {showPassModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl shadow-2xl max-w-sm w-full">
+            <div className="flex justify-center mb-4"><div className="bg-blue-500/20 p-4 rounded-full text-blue-400"><Lock size={40} /></div></div>
+            <h3 className="text-xl font-black text-center mb-2 uppercase tracking-tight">Acceso Restringido</h3>
+            <p className="text-slate-400 text-center text-sm mb-6">Introduce la clave de la facultad para editar los horarios.</p>
+            <input type="password" placeholder="Contraseña..." className={`w-full bg-slate-900 border ${passError ? 'border-red-500 animate-shake' : 'border-slate-700'} rounded-xl p-4 text-center text-xl font-bold mb-4 outline-none`} value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && verifyPassword()} autoFocus />
+            {passError && <p className="text-red-500 text-[10px] font-bold text-center mb-4 uppercase">Contraseña Incorrecta</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowPassModal(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold text-xs uppercase">Cancelar</button>
+              <button onClick={verifyPassword} className="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-xs uppercase shadow-lg shadow-blue-500/20">Entrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+      `}</style>
+    </div>
+  );
+};
