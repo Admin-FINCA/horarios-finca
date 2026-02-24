@@ -11,27 +11,28 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         
-        /* Permitir scroll en toda la web */
+        /* Habilitar scroll en toda la web */
         html, body { 
             font-family: 'Inter', sans-serif; 
             background-color: #0f172a; 
             margin: 0; 
             color: white;
-            overflow-y: auto !important; /* Habilitar scroll general */
+            min-height: 100vh;
+            overflow-y: auto !important; 
             scroll-behavior: smooth;
         }
 
-        /* Ocultar scrollbar pero mantener funcionalidad para una estética limpia en TV */
+        /* Estética limpia para el scroll */
         ::-webkit-scrollbar {
-            width: 8px;
+            width: 10px;
         }
         ::-webkit-scrollbar-track {
             background: #0f172a;
@@ -39,6 +40,7 @@
         ::-webkit-scrollbar-thumb {
             background: #334155;
             border-radius: 10px;
+            border: 2px solid #0f172a;
         }
 
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
@@ -50,23 +52,15 @@
 
     <script type="text/babel">
         // --- CONFIGURACIÓN DE FIREBASE ---
-        let firebaseApp, db, auth;
+        const firebaseConfig = JSON.parse(__firebase_config);
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
 
-        try {
-            if (typeof __firebase_config !== 'undefined') {
-                const firebaseConfig = JSON.parse(__firebase_config);
-                firebaseApp = firebase.initializeApp(firebaseConfig);
-                auth = firebase.auth();
-                db = firebase.firestore();
-            }
-        } catch (e) {
-            console.warn("Firebase no detectado. Modo local activado.");
-        }
+        const { useState, useEffect, Fragment, useCallback } = React;
 
-        const { useState, useEffect, Fragment } = React;
-
-        // Iconos SVG integrados para evitar errores de librerías externas
+        // Iconos SVG nativos para evitar errores de red
         const Icon = ({ name, size = 24, className = "" }) => {
             const icons = {
                 Clock: <path d="M12 6v6l4 2" />,
@@ -150,25 +144,31 @@
             const [schedules, setSchedules] = useState({});
             const [isSaving, setIsSaving] = useState(false);
 
+            // 1. Autenticación Anónima Obligatoria
             useEffect(() => {
-                if (!auth) return;
-                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (token) auth.signInWithCustomToken(token);
-                else auth.signInAnonymously();
+                const initAuth = async () => {
+                    const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if (token) await auth.signInWithCustomToken(token);
+                    else await auth.signInAnonymously();
+                };
+                initAuth();
                 const unsubscribe = auth.onAuthStateChanged(setUser);
                 return () => unsubscribe();
             }, []);
 
+            // 2. Sincronización en tiempo real
             useEffect(() => {
-                if (!db || !user) return;
+                if (!user) return;
                 const path = `artifacts/${appId}/public/data/schedules`;
-                return db.collection(path).onSnapshot(snap => {
+                const unsubscribe = db.collection(path).onSnapshot(snap => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
                     setSchedules(data);
                 });
+                return () => unsubscribe();
             }, [user]);
 
+            // 3. Reloj y Rotación Automática
             useEffect(() => {
                 const timer = setInterval(() => setCurrentTime(new Date()), 1000);
                 const rotator = setInterval(() => {
@@ -179,15 +179,34 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            const saveEntry = async (careerId, year, day, hIdx, field, value) => {
-                if (!db || !isAdminMode) return;
-                setIsSaving(true);
+            // 4. Función de guardado optimizada
+            const handleUpdateEntry = async (careerId, year, day, hIdx, field, value) => {
                 const docId = `${careerId}-${year}`;
-                const currentData = schedules[docId] || {};
-                const daySlots = [...(currentData[day] || HOURS.map(h => ({ hour: h, subject: '', room: '' })))];
-                daySlots[hIdx] = { ...daySlots[hIdx], [field]: value };
-                await db.collection(`artifacts/${appId}/public/data/schedules`).doc(docId).set({ slots: { ...currentData, [day]: daySlots } }, { merge: true });
-                setIsSaving(false);
+                
+                // Actualización local inmediata para que el input no se trabe
+                setSchedules(prev => {
+                    const newSchedules = { ...prev };
+                    if (!newSchedules[docId]) newSchedules[docId] = {};
+                    if (!newSchedules[docId][day]) newSchedules[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
+                    const updatedDay = [...newSchedules[docId][day]];
+                    updatedDay[hIdx] = { ...updatedDay[hIdx], [field]: value };
+                    newSchedules[docId][day] = updatedDay;
+                    return newSchedules;
+                });
+
+                // Sincronización diferida con Firestore
+                setIsSaving(true);
+                try {
+                    const docRef = db.collection(`artifacts/${appId}/public/data/schedules`).doc(docId);
+                    const currentData = schedules[docId] || {};
+                    const daySlots = [...(currentData[day] || HOURS.map(h => ({ hour: h, subject: '', room: '' })))];
+                    daySlots[hIdx] = { ...daySlots[hIdx], [field]: value };
+                    await docRef.set({ slots: { ...currentData, [day]: daySlots } }, { merge: true });
+                } catch (e) {
+                    console.error("Error al guardar:", e);
+                } finally {
+                    setIsSaving(false);
+                }
             };
 
             const career = CAREERS[currentCareerIdx];
@@ -196,118 +215,156 @@
 
             return (
                 <div className="flex flex-col min-h-screen">
-                    {/* ENCABEZADO */}
-                    <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20">
+                    {/* ENCABEZADO FIJO */}
+                    <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-6">
-                            <div className="bg-white p-1 rounded-lg overflow-hidden flex items-center justify-center shadow-md w-24 h-24 shrink-0">
-                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" />
+                            <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg ring-2 ring-slate-700 w-24 h-24 shrink-0">
+                                <img 
+                                    src="Logo_UVM.png" 
+                                    alt="Logo UVM" 
+                                    className="max-w-full max-h-full object-contain"
+                                    onError={(e) => { e.target.src = 'https://via.placeholder.com/100x100?text=LOGO+UVM'; }}
+                                />
                             </div>
                             <div>
-                                <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales</h1>
-                                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-2 italic">Sistema de Gestión Horaria • UVM</p>
+                                <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">
+                                    Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales
+                                </h1>
+                                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">SISTEMA DE GESTIÓN HORARIA • UNIVERSIDAD VIÑA DEL MAR</p>
                             </div>
                         </div>
-                        <div className="text-right">
-                            <div className="text-4xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString()}</div>
-                            <div className="text-[10px] text-slate-500 uppercase font-bold mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+
+                        <div className="flex items-center gap-8">
+                            <div className="text-right">
+                                <div className="text-4xl font-mono font-bold text-blue-400 leading-none">
+                                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </div>
+                                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-2">
+                                    {currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </div>
+                            </div>
+                            {isSaving && <div className="animate-spin text-blue-500"><Icon name="Save" size={24} /></div>}
                         </div>
                     </header>
 
-                    {/* BANNER CARRERA */}
+                    {/* BANNER CARRERA STICKY */}
                     <div className={`${career.color} py-4 px-8 flex justify-between items-center shadow-lg sticky top-0 z-30 transition-colors duration-1000`}>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all"><Icon name="ChevronLeft" size={36}/></button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all active:scale-95 text-white">
+                            <Icon name="ChevronLeft" size={36}/>
+                        </button>
                         <div className="text-center">
                             <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tighter drop-shadow-md leading-none">{career.name}</h2>
-                            <div className="flex items-center justify-center gap-2 mt-2 opacity-90 uppercase text-[10px] font-bold tracking-widest">
+                            <div className="flex items-center justify-center gap-3 mt-2 opacity-90 uppercase text-[10px] font-bold tracking-widest">
                                 <Icon name="GraduationCap" size={14}/> {selectedYear}º AÑO • CARRERA {currentCareerIdx+1}/8
                             </div>
                         </div>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all"><Icon name="ChevronRight" size={36}/></button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 hover:bg-black/10 rounded-full transition-all active:scale-95 text-white">
+                            <Icon name="ChevronRight" size={36}/>
+                        </button>
                     </div>
 
-                    {/* CONTENIDO PRINCIPAL */}
-                    <main className="flex-1 p-6 flex flex-col gap-8 bg-slate-900">
-                        {/* SELECTORES */}
-                        <div className="flex flex-col items-center gap-4 shrink-0">
-                            <div className="flex gap-1 bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-xl">
-                                {YEARS.map(y => (
-                                    <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
-                                ))}
+                    {/* CONTENIDO PRINCIPAL (FLUYE NATURALMENTE HACIA ABAJO) */}
+                    <main className="flex-1 p-6 md:p-8 bg-slate-900">
+                        <div className="max-w-7xl mx-auto flex flex-col gap-8">
+                            
+                            {/* SELECTORES CENTRALES */}
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="flex gap-1 bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-xl">
+                                    {YEARS.map(y => (
+                                        <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setViewMode('daily')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white font-black scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                        <Icon name="Clock" size={18}/> DIARIO
+                                    </button>
+                                    <button onClick={() => setViewMode('weekly')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white font-black scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                        <Icon name="Calendar" size={18}/> SEMANAL
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex gap-4">
-                                <button onClick={() => setViewMode('daily')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'daily' ? 'bg-white text-slate-900 shadow-xl scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Clock" size={18}/> DIARIO</button>
-                                <button onClick={() => setViewMode('weekly')} className={`px-8 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 shadow-xl scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Calendar" size={18}/> SEMANAL</button>
-                            </div>
-                        </div>
 
-                        {/* REJILLA DE DATOS (SIN OVERFLOW HIDDEN) */}
-                        <div className="max-w-7xl mx-auto w-full mb-12">
-                            {viewMode === 'daily' ? (
-                                <div className="space-y-4">
-                                    <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.3em] mb-8 text-2xl italic">Horario de {currentDayName}</h3>
-                                    {HOURS.map((h, i) => {
-                                        const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
-                                        return (
-                                            <div key={i} className={`flex items-center p-5 rounded-[2rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[12px] border-blue-500 shadow-2xl' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
-                                                <div className="w-36 text-sm font-mono font-bold text-slate-400 shrink-0">
-                                                    <span className="text-[10px] text-blue-500/60 block uppercase font-black mb-1">Clave {i+1}</span>{h}
-                                                </div>
-                                                {isAdminMode ? (
-                                                    <div className="flex-1 flex gap-4 ml-6">
-                                                        <input type="text" placeholder="Asignatura..." className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-blue-500 outline-none" value={slot.subject} onChange={e => saveEntry(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
-                                                        <input type="text" placeholder="Aula" className="w-32 bg-slate-950 border border-slate-700 rounded-xl p-3 text-blue-400 text-center font-bold" value={slot.room} onChange={e => saveEntry(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
+                            {/* REJILLA DE HORARIOS */}
+                            <div className="w-full mb-20">
+                                {viewMode === 'daily' ? (
+                                    <div className="space-y-4 max-w-5xl mx-auto">
+                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.3em] mb-10 text-2xl italic drop-shadow-md">Horario de {currentDayName}</h3>
+                                        {HOURS.map((h, i) => {
+                                            const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
+                                            return (
+                                                <div key={i} className={`flex items-center p-5 rounded-[2rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[12px] border-blue-500 shadow-2xl scale-[1.01]' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
+                                                    <div className="w-40 text-sm font-mono font-bold text-slate-400 shrink-0">
+                                                        <span className="text-[10px] text-blue-500/60 block uppercase font-black mb-1">Clave {i+1}</span>{h}
                                                     </div>
-                                                ) : (
-                                                    <div className="flex-1 ml-10 overflow-hidden">
-                                                        <div className="text-3xl font-black truncate drop-shadow-lg uppercase tracking-tight">{slot.subject || "LIBRE"}</div>
-                                                        {slot.subject && <div className="text-blue-400 font-bold uppercase text-sm mt-1 tracking-widest">{slot.room}</div>}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto pb-4">
-                                    <div className="grid grid-cols-6 gap-3 min-w-[1100px]">
-                                        {DAYS.map(day => (
-                                            <div key={day} className="flex flex-col gap-3">
-                                                <div className={`p-4 rounded-2xl text-center font-black text-sm uppercase tracking-tighter shadow-xl ${day === currentDayName ? 'bg-blue-600 shadow-2xl scale-105' : 'bg-slate-700 text-slate-400'}`}>{day}</div>
-                                                {HOURS.map((h, i) => {
-                                                    const slot = (currentSchedule[day] || [])[i] || { subject: '', room: '' };
-                                                    return (
-                                                        <div key={i} className={`p-3.5 rounded-2xl flex-1 min-h-[85px] flex flex-col justify-center border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-1 ring-white/5 shadow-xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
-                                                            <div className="text-[9px] font-mono text-slate-500 mb-1.5 font-bold uppercase leading-none">Clave {i+1}</div>
-                                                            <div className="text-[11px] font-black leading-tight line-clamp-3 uppercase tracking-tighter text-white/90">{slot.subject}</div>
-                                                            {slot.subject && <div className="text-[10px] text-blue-400 font-bold mt-2 uppercase italic truncate leading-none">{slot.room}</div>}
+                                                    
+                                                    {isAdminMode ? (
+                                                        <div className="flex-1 flex gap-4 ml-8">
+                                                            <input 
+                                                                type="text" 
+                                                                placeholder="Asignatura..." 
+                                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-blue-500 outline-none transition-all shadow-inner"
+                                                                value={slot.subject}
+                                                                onChange={e => handleUpdateEntry(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)}
+                                                            />
+                                                            <input 
+                                                                type="text" 
+                                                                placeholder="Aula" 
+                                                                className="w-32 bg-slate-950 border border-slate-700 rounded-xl p-3 text-blue-400 text-center font-bold focus:border-blue-500 outline-none"
+                                                                value={slot.room}
+                                                                onChange={e => handleUpdateEntry(career.id, selectedYear, currentDayName, i, 'room', e.target.value)}
+                                                            />
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ))}
+                                                    ) : (
+                                                        <div className="flex-1 ml-10 overflow-hidden">
+                                                            <div className="text-3xl font-black truncate drop-shadow-lg uppercase tracking-tight">{slot.subject || "BLOQUE DISPONIBLE"}</div>
+                                                            {slot.subject && <div className="text-blue-400 font-bold uppercase text-sm mt-1 tracking-widest flex items-center gap-2"><Icon name="Monitor" size={14}/> {slot.room}</div>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                </div>
-                            )}
+                                ) : (
+                                    <div className="overflow-x-auto pb-4">
+                                        <div className="grid grid-cols-6 gap-3 min-w-[1100px]">
+                                            {DAYS.map(day => (
+                                                <div key={day} className="flex flex-col gap-3">
+                                                    <div className={`p-4 rounded-2xl text-center font-black text-sm uppercase tracking-tighter shadow-xl ${day === currentDayName ? 'bg-blue-600 shadow-2xl scale-105' : 'bg-slate-700 text-slate-400'}`}>{day}</div>
+                                                    {HOURS.map((h, i) => {
+                                                        const slot = (currentSchedule[day] || [])[i] || { subject: '', room: '' };
+                                                        return (
+                                                            <div key={i} className={`p-3.5 rounded-2xl flex-1 min-h-[90px] flex flex-col justify-center border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-1 ring-white/5 shadow-xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
+                                                                <div className="text-[9px] font-mono text-slate-500 mb-2 font-bold uppercase leading-none border-b border-slate-700/50 pb-1">Clave {i+1}</div>
+                                                                <div className="text-[11px] font-black leading-tight line-clamp-3 uppercase tracking-tighter text-white/90">{slot.subject}</div>
+                                                                {slot.subject && <div className="text-[10px] text-blue-400 font-bold mt-2 uppercase italic truncate leading-none">{slot.room}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </main>
 
-                    {/* PIE DE PÁGINA */}
-                    <footer className="bg-slate-800 border-t border-slate-700 p-5 px-8 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest shrink-0">
+                    {/* PIE DE PÁGINA (CONECTADO AL FLUJO) */}
+                    <footer className="bg-slate-800 border-t border-slate-700 p-6 px-8 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest shrink-0">
                         <div className="flex gap-4">
                             <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-3 px-6 py-3 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
-                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={16}/> {isAutoPlaying ? 'ROTACIÓN ON' : 'ROTACIÓN PAUSA'}
+                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={16}/> {isAutoPlaying ? 'AUTO ON' : 'AUTO OFF'}
                             </button>
                             <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-3 px-6 py-3 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
                                 <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={16}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMINISTRADOR'}
                             </button>
                         </div>
                         <div className="flex items-center gap-4 text-slate-500 italic uppercase">
-                            {isSaving && <div className="animate-spin text-blue-500"><Icon name="Save" size={16} /></div>}
                             <Icon name="Monitor" size={18}/> SINCRONIZACIÓN CLOUD • FINCA@2026
                         </div>
                     </footer>
 
-                    {/* MODAL PASSWORD */}
+                    {/* MODAL DE CONTRASEÑA */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-6 text-white">
                             <div className="bg-slate-800 border border-slate-700 p-12 rounded-[3.5rem] shadow-[0_0_100px_rgba(0,0,0,0.8)] max-w-md w-full text-center">
@@ -324,8 +381,8 @@
                                     autoFocus 
                                 />
                                 <div className="flex gap-4">
-                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-5 rounded-2xl uppercase font-black text-xs tracking-widest transition-all active:scale-95">Cerrar</button>
-                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-5 rounded-2xl uppercase font-black text-xs tracking-widest shadow-2xl transition-all active:scale-95">Entrar</button>
+                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-5 rounded-2xl uppercase font-black text-xs tracking-widest transition-all">Cerrar</button>
+                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-5 rounded-2xl uppercase font-black text-xs tracking-widest shadow-2xl shadow-blue-600/30 transition-all">Entrar</button>
                                 </div>
                             </div>
                         </div>
