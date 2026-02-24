@@ -52,20 +52,20 @@
             background: rgba(15, 23, 42, 0.6);
             border: 1px solid #475569;
             border-radius: 0.4rem;
-            padding: 0.25rem;
+            padding: 0.35rem;
             color: white;
             width: 100%;
-            font-size: 11px;
+            font-size: 12px;
             outline: none;
-            min-height: 40px;
+            min-height: 50px;
         }
         .input-admin-sm:focus { border-color: #3b82f6; background: rgba(30, 41, 59, 1); }
 
         .weekly-grid {
             display: grid;
             grid-template-columns: 80px repeat(6, 1fr);
-            gap: 10px;
-            min-width: 1100px; 
+            gap: 12px;
+            min-width: 1200px; 
         }
         
         .subject-text {
@@ -80,6 +80,21 @@
 
     <script type="text/babel">
         const { useState, useEffect, Fragment, useRef, useCallback } = React;
+
+        // --- INSTRUCCIONES PARA EL USUARIO (IMPORTANTE PARA GITHUB) ---
+        // Si usas este archivo en GitHub, debes crear un proyecto en console.firebase.google.com
+        // y reemplazar este objeto por el que te dé Google.
+        const myCustomFirebaseConfig = null; // Pega aquí tu config si tienes una propia
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myCustomFirebaseConfig;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-uvm-app';
+
+        if (firebaseConfig && !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        const auth = firebase.apps.length ? firebase.auth() : null;
+        const db = firebase.apps.length ? firebase.firestore() : null;
 
         // --- CONSTANTES ---
         const CAREERS = [
@@ -136,59 +151,41 @@
             const [passwordInput, setPasswordInput] = useState('');
             const [passError, setPassError] = useState(false);
             const [schedules, setSchedules] = useState({});
-            const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'pending', 'saving'
+            const [saveStatus, setSaveStatus] = useState('saved'); 
             const [isSystemReady, setIsSystemReady] = useState(false);
-            const [isOffline, setIsOffline] = useState(false);
 
             const saveTimeoutRef = useRef(null);
 
-            // 1. INICIALIZACIÓN FIREBASE
+            // 1. AUTENTICACIÓN
             useEffect(() => {
-                const initApp = async () => {
+                if (!auth) {
+                    setIsSystemReady(true);
+                    return;
+                }
+                const initAuth = async () => {
                     try {
-                        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-                        if (!configStr) {
-                            setIsOffline(true);
-                            setIsSystemReady(true);
-                            return;
-                        }
-
-                        const config = JSON.parse(configStr);
-                        if (!firebase.apps.length) firebase.initializeApp(config);
-                        
-                        const authInstance = firebase.auth();
                         const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                        
-                        if (token) await authInstance.signInWithCustomToken(token);
-                        else await authInstance.signInAnonymously();
-
-                        authInstance.onAuthStateChanged((u) => {
-                            setUser(u);
-                            setIsSystemReady(true);
-                        });
-                    } catch (e) {
-                        console.error("Firebase fail:", e);
-                        setIsOffline(true);
-                        setIsSystemReady(true);
-                    }
+                        if (token) await auth.signInWithCustomToken(token);
+                        else await auth.signInAnonymously();
+                    } catch (e) { console.error("Auth Fail:", e); }
+                    setIsSystemReady(true);
                 };
-                initApp();
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged(setUser);
+                return () => unsubscribe();
             }, []);
 
             // 2. ESCUCHA DE DATOS (REGLA 1)
             useEffect(() => {
-                if (!isSystemReady || !user || isOffline) return;
-                const db = firebase.firestore();
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
+                if (!isSystemReady || !user || !db) return;
                 const path = `/artifacts/${appId}/public/data/schedules`;
-                
                 const unsubscribe = db.collection(path).onSnapshot((snapshot) => {
                     const data = {};
                     snapshot.forEach(doc => { data[doc.id] = doc.data().slots; });
                     setSchedules(prev => ({...prev, ...data}));
                 });
                 return () => unsubscribe();
-            }, [isSystemReady, user, isOffline]);
+            }, [isSystemReady, user]);
 
             // 3. RELOJ Y ROTACIÓN
             useEffect(() => {
@@ -201,15 +198,14 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            // 4. FUNCIÓN DE GUARDADO PERSISTENTE
-            const persistToCloud = useCallback(async (forcedData = null) => {
-                if (isOffline) return;
-                if (!user || !isSystemReady || (saveStatus === 'saving' && !forcedData)) return;
+            // 4. FUNCIÓN DE GUARDADO MANUAL (DISQUETE)
+            const persistToCloud = async () => {
+                if (!db || !user || saveStatus === 'saving') return;
                 
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
-                const dataToSave = forcedData || schedules[docId];
+                const dataToSave = schedules[docId];
 
                 if (!dataToSave) {
                     setSaveStatus('saved');
@@ -217,37 +213,29 @@
                 }
 
                 try {
-                    const db = firebase.firestore();
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
                     const docPath = `/artifacts/${appId}/public/data/schedules/${docId}`;
-                    
                     await db.doc(docPath).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
-                    console.log("Datos guardados en la nube exitosamente.");
                 } catch (e) {
-                    console.error("Fallo al guardar:", e);
+                    console.error("Save Error:", e);
                     setSaveStatus('pending');
                 }
-            }, [user, isSystemReady, isOffline, currentCareerIdx, selectedYear, schedules, saveStatus]);
+            };
 
-            // 5. MANEJO DE CAMBIOS
+            // 5. MANEJO DE CAMBIOS (DEBOUNCE 5s RESPALDO)
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
                 if (!isAdminMode) return;
                 const docId = `${careerId}-${year}`;
-                
                 setSaveStatus('pending');
 
                 setSchedules(prev => {
-                    const next = JSON.parse(JSON.stringify(prev)); // Deep clone para evitar mutaciones
+                    const next = JSON.parse(JSON.stringify(prev));
                     if (!next[docId]) next[docId] = {};
-                    if (!next[docId][day]) {
-                        next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
-                    }
+                    if (!next[docId][day]) next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
                     next[docId][day][hIdx][field] = value;
                     
-                    // Auto-guardado debounce (5s)
                     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                    saveTimeoutRef.current = setTimeout(() => persistToCloud(next[docId]), 5000);
+                    saveTimeoutRef.current = setTimeout(() => persistToCloud(), 5000);
                     
                     return next;
                 });
@@ -270,7 +258,6 @@
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900">
-                    {/* ENCABEZADO */}
                     <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-6">
                             <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg w-28 h-28 shrink-0">
@@ -292,24 +279,22 @@
                                 <div className="text-[11px] text-slate-500 uppercase font-black mt-3 tracking-[0.2em]">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             
-                            {/* BOTÓN DISQUETE - GUARDADO MANUAL PRIORITARIO */}
-                            <button 
-                                onClick={() => persistToCloud()}
-                                disabled={isOffline || saveStatus === 'saving'}
-                                className={`transition-all duration-300 p-5 rounded-2xl border-4 active:scale-95 flex items-center justify-center ${
-                                    isOffline ? 'text-gray-600 border-gray-800 cursor-not-allowed' :
-                                    saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40 hover:opacity-100' : 
-                                    saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin' : 
-                                    'text-yellow-500 border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] animate-bounce cursor-pointer'
-                                }`}
-                                title={isOffline ? "Sin conexión a base de datos" : saveStatus === 'pending' ? "GUARDAR CAMBIOS AHORA" : "Sincronizado"}
-                            >
-                                <Icon name={isOffline ? "WifiOff" : "Save"} size={40} />
-                            </button>
+                            {isAdminMode && (
+                                <button 
+                                    onClick={persistToCloud}
+                                    className={`transition-all duration-300 p-5 rounded-2xl border-4 active:scale-95 flex items-center justify-center ${
+                                        saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
+                                        saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin' : 
+                                        'text-yellow-500 border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] animate-bounce'
+                                    }`}
+                                    title="Guardar cambios ahora"
+                                >
+                                    <Icon name="Save" size={40} />
+                                </button>
+                            )}
                         </div>
                     </header>
 
-                    {/* BANNER CARRERA */}
                     <div className={`${career.color} py-5 px-8 flex justify-between items-center shadow-2xl sticky top-0 z-30 transition-colors duration-1000`}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-3 hover:bg-black/10 rounded-full transition-all text-white active:scale-90"><Icon name="ChevronLeft" size={44}/></button>
                         <div className="text-center text-white px-6">
@@ -336,22 +321,22 @@
                                 </div>
                             </div>
 
-                            <div className="w-full mb-24 text-sm">
+                            <div className="w-full mb-24">
                                 {viewMode === 'daily' ? (
-                                    <div className="space-y-5 max-w-5xl mx-auto">
-                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.5em] mb-12 text-3xl italic drop-shadow-lg font-black">Programación de {currentDayName}</h3>
+                                    <div className="space-y-6 max-w-5xl mx-auto">
+                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.5em] mb-12 text-3xl italic drop-shadow-lg">Programación de {currentDayName}</h3>
                                         {HOURS.map((h, i) => {
                                             const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                             return (
                                                 <div key={i} className={`flex items-center p-7 rounded-[3rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[20px] border-blue-500 shadow-2xl scale-[1.01]' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
                                                     <div className="w-48 text-xl font-mono font-bold text-slate-400 shrink-0 leading-none">
-                                                        <span className="text-xs text-blue-500 block uppercase mb-3 font-black tracking-widest text-xs">CLAVE {i+1}</span>{h}
+                                                        <span className="text-xs text-blue-500 block uppercase mb-3 font-black tracking-widest">CLAVE {i+1}</span>{h}
                                                     </div>
                                                     {isAdminMode ? (
                                                         <div className="flex-1 flex gap-6 ml-10">
                                                             <textarea 
                                                                 rows="2"
-                                                                placeholder="Nombre Asignatura..." 
+                                                                placeholder="Asignatura..." 
                                                                 className="input-admin text-xl font-black resize-none" 
                                                                 value={slot.subject} 
                                                                 onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} 
@@ -365,9 +350,9 @@
                                                             />
                                                         </div>
                                                     ) : (
-                                                        <div className="flex-1 ml-12 overflow-hidden text-left">
-                                                            <div className="text-4xl font-black uppercase tracking-tight subject-text mb-2 font-black">{slot.subject || "BLOQUE LIBRE"}</div>
-                                                            {slot.subject && <div className="text-blue-400 font-black uppercase text-xl mt-3 tracking-[0.2em] flex items-center gap-3 font-black"><Icon name="Monitor" size={22}/> SALA {slot.room}</div>}
+                                                        <div className="flex-1 ml-12 overflow-hidden text-left font-black">
+                                                            <div className="text-4xl uppercase tracking-tight subject-text mb-2">{slot.subject || "BLOQUE LIBRE"}</div>
+                                                            {slot.subject && <div className="text-blue-400 uppercase text-xl mt-3 tracking-[0.2em] flex items-center gap-3"><Icon name="Monitor" size={22}/> SALA {slot.room}</div>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -392,21 +377,20 @@
                                                     {DAYS.map(day => {
                                                         const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
                                                         return (
-                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[180px] h-full flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
+                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[180px] h-auto flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
                                                                 <div className="text-[9px] font-mono text-slate-500 mb-2 font-black uppercase leading-none border-b border-slate-700/50 pb-2 italic text-[8px]">CLAVE {hIdx+1}</div>
                                                                 
                                                                 {isAdminMode ? (
-                                                                    <div className="flex flex-col gap-2 mt-1">
+                                                                    <div className="flex flex-col gap-3 mt-1 h-full">
                                                                         <textarea 
-                                                                            rows="4"
-                                                                            placeholder="Asignatura..."
+                                                                            placeholder="Materia..."
                                                                             className="input-admin-sm resize-none font-bold"
                                                                             value={slot.subject}
                                                                             onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)}
                                                                         />
                                                                         <input 
                                                                             type="text"
-                                                                            placeholder="Aula"
+                                                                            placeholder="Sala"
                                                                             className="input-admin-sm text-center text-blue-400 font-black"
                                                                             value={slot.room}
                                                                             onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)}
@@ -417,7 +401,7 @@
                                                                         <div className="text-[13px] font-black leading-tight uppercase tracking-tight text-white/90 mb-3 subject-text font-black">
                                                                             {slot.subject}
                                                                         </div>
-                                                                        {slot.subject && <div className="text-[10px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none font-black">SALA {slot.room}</div>}
+                                                                        {slot.subject && <div className="text-[11px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none font-black">SALA {slot.room}</div>}
                                                                     </Fragment>
                                                                 )}
                                                             </div>
@@ -432,38 +416,34 @@
                         </div>
                     </main>
 
-                    {/* PIE DE PÁGINA */}
                     <footer className="bg-slate-800 border-t border-slate-700 p-8 px-10 flex justify-between items-center text-xs font-black uppercase tracking-[0.3em] shrink-0 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
                         <div className="flex gap-6">
                             <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
                                 <Icon name={isAutoPlaying ? "Pause" : "Play"} size={24}/> {isAutoPlaying ? 'ROTACIÓN ACTIVADA' : 'ROTACIÓN PAUSADA'}
                             </button>
-                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
+                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
                                 <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={24}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMINISTRADOR'}
                             </button>
                         </div>
-                        <div className="flex flex-col items-end gap-3 text-slate-500 italic uppercase">
-                            <div className="flex items-center gap-4 bg-slate-900/50 px-5 py-2 rounded-full">
-                                {isOffline ? (
-                                    <span className="text-red-500 font-black text-[10px] animate-pulse">MODO OFFLINE - SIN BASE DE DATOS</span>
-                                ) : (
-                                    <span className={`${saveStatus === 'saved' ? 'text-green-400' : 'text-yellow-400'} font-black text-[10px]`}>
-                                        {saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 
-                                         saveStatus === 'saving' ? 'PROCESANDO EN NUBE...' : 'MODIFICACIONES PENDIENTES - PULSE EL DISQUETE'}
-                                    </span>
-                                )}
-                                <Icon name="Monitor" size={24}/> FINCA 2026
-                            </div>
+                        <div className="flex items-center gap-4 bg-slate-900/50 px-5 py-2 rounded-full">
+                            {!db ? (
+                                <span className="text-red-500 font-black text-[10px] animate-pulse">MODO OFFLINE - CONFIGURACIÓN PENDIENTE</span>
+                            ) : (
+                                <span className={`${saveStatus === 'saved' ? 'text-green-400' : 'text-yellow-400'} font-black text-[10px]`}>
+                                    {saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 
+                                     saveStatus === 'saving' ? 'PROCESANDO...' : 'PULSE EL DISQUETE PARA GUARDAR'}
+                                </span>
+                            )}
+                            <Icon name="Monitor" size={24}/> FINCA UVM 2026
                         </div>
                     </footer>
 
-                    {/* MODAL PASSWORD */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-8 text-white text-center">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-12 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10 font-black">
+                            <div className="bg-slate-800 border-2 border-slate-700 p-16 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10 font-black">
                                 <div className="mb-12 text-blue-500 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.5)]"><Icon name="Lock" size={100} /></div>
-                                <h3 className="text-4xl font-black uppercase mb-6 tracking-tighter">Acceso Institucional</h3>
-                                <p className="text-slate-400 text-lg mb-14 px-8 leading-relaxed font-medium">Ingrese la contraseña para habilitar la edición de contenidos de la Facultad.</p>
+                                <h3 className="text-4xl font-black uppercase mb-6 tracking-tighter text-white">Acceso de Gestión</h3>
+                                <p className="text-slate-400 text-lg mb-14 px-8 leading-relaxed font-medium">Ingrese la contraseña institucional para habilitar la edición de contenidos.</p>
                                 <input 
                                     type="password" 
                                     placeholder="CONTRASEÑA" 
