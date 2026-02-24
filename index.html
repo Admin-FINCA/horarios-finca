@@ -140,9 +140,9 @@
             const saveTimeoutRef = useRef(null);
             const firebaseInitRef = useRef(false);
 
-            // 1. INICIALIZACIÓN PROTEGIDA
+            // 1. INICIALIZACIÓN DE FIREBASE
             useEffect(() => {
-                const startApplication = async () => {
+                const initApp = async () => {
                     if (firebaseInitRef.current) return;
                     firebaseInitRef.current = true;
 
@@ -152,31 +152,28 @@
                             const config = JSON.parse(configStr);
                             if (!firebase.apps.length) firebase.initializeApp(config);
                             
-                            const auth = firebase.auth();
+                            const authInstance = firebase.auth();
                             const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                             
-                            if (token) await auth.signInWithCustomToken(token);
-                            else await auth.signInAnonymously();
+                            if (token) await authInstance.signInWithCustomToken(token);
+                            else await authInstance.signInAnonymously();
 
-                            auth.onAuthStateChanged((u) => {
+                            authInstance.onAuthStateChanged((u) => {
                                 setUser(u);
                                 setIsSystemReady(true);
                             });
                         } else {
-                            setIsSystemReady(true); // Modo local
+                            setIsSystemReady(true);
                         }
                     } catch (e) {
-                        console.error("Fallo inicialización:", e);
-                        setIsSystemReady(true); 
+                        console.error("Firebase init failed:", e);
+                        setIsSystemReady(true);
                     }
                 };
-
-                startApplication();
-                const timer = setTimeout(() => setIsSystemReady(true), 4000);
-                return () => clearTimeout(timer);
+                initApp();
             }, []);
 
-            // 2. ESCUCHA DE DATOS
+            // 2. SINCRONIZACIÓN DE DATOS (REGLA 1)
             useEffect(() => {
                 if (!isSystemReady || !user) return;
                 const db = firebase.firestore();
@@ -187,9 +184,8 @@
                     const data = {};
                     snapshot.forEach(doc => { data[doc.id] = doc.data().slots; });
                     setSchedules(prev => ({...prev, ...data}));
-                }, (error) => {
-                    console.error("Error Firestore:", error);
-                });
+                }, (error) => console.error("Firestore Error:", error));
+                
                 return () => unsubscribe();
             }, [isSystemReady, user]);
 
@@ -204,11 +200,9 @@
                 return () => { clearInterval(timer); clearInterval(rotator); };
             }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            // 4. FUNCIÓN DE GUARDADO MANUAL (BOTÓN DISQUETE)
-            const manualSave = async () => {
+            // 4. FUNCIÓN DE GUARDADO MANUAL (DISQUETE)
+            const persistToCloud = async () => {
                 if (!user || !isSystemReady || saveStatus === 'saving') return;
-                
-                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
                 
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
@@ -223,48 +217,35 @@
                 try {
                     const db = firebase.firestore();
                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
-                    const path = `/artifacts/${appId}/public/data/schedules/${docId}`;
+                    const docPath = `/artifacts/${appId}/public/data/schedules/${docId}`;
                     
-                    await db.doc(path).set({ slots: currentData }, { merge: true });
+                    await db.doc(docPath).set({ slots: currentData }, { merge: true });
                     setSaveStatus('saved');
                 } catch (e) {
-                    console.error("Error al persistir datos:", e);
+                    console.error("Save failed:", e);
                     setSaveStatus('pending');
                 }
             };
 
-            // 5. ACTUALIZACIÓN DE DATOS CON DEBOUNCE (RESPALDO)
+            // 5. ACTUALIZACIÓN LOCAL (UI) + AUTO-GUARDADO RESPALDO
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
-                if (!isAdminMode) return;
                 const docId = `${careerId}-${year}`;
-                
                 setSaveStatus('pending');
 
-                const updatedSchedules = { ...schedules };
-                if (!updatedSchedules[docId]) updatedSchedules[docId] = {};
-                if (!updatedSchedules[docId][day]) updatedSchedules[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
-                
-                const updatedDay = [...updatedSchedules[docId][day]];
-                updatedDay[hIdx] = { ...updatedDay[hIdx], [field]: value };
-                updatedSchedules[docId][day] = updatedDay;
-                
-                setSchedules(updatedSchedules);
+                setSchedules(prev => {
+                    const next = { ...prev };
+                    if (!next[docId]) next[docId] = {};
+                    if (!next[docId][day]) next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
+                    
+                    const updatedDay = [...next[docId][day]];
+                    updatedDay[hIdx] = { ...updatedDay[hIdx], [field]: value };
+                    next[docId][day] = updatedDay;
+                    return next;
+                });
 
+                // Auto-guardado tras 5 segundos de inactividad
                 if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-
-                saveTimeoutRef.current = setTimeout(async () => {
-                    if (!user) return;
-                    setSaveStatus('saving');
-                    try {
-                        const db = firebase.firestore();
-                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-tv-app';
-                        const path = `/artifacts/${appId}/public/data/schedules/${docId}`;
-                        await db.doc(path).set({ slots: updatedSchedules[docId] }, { merge: true });
-                        setSaveStatus('saved');
-                    } catch (e) {
-                        setSaveStatus('pending');
-                    }
-                }, 3000); // 3 segundos de calma antes del auto-guardado
+                saveTimeoutRef.current = setTimeout(persistToCloud, 5000);
             };
 
             const career = CAREERS[currentCareerIdx];
@@ -276,7 +257,7 @@
                     <div className="flex items-center justify-center min-h-screen bg-slate-950">
                         <div className="text-center">
                             <div className="animate-spin text-blue-500 mb-6 flex justify-center"><Icon name="Monitor" size={64}/></div>
-                            <p className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse">Iniciando Sistema UVM...</p>
+                            <p className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse">Sincronizando Sistema UVM...</p>
                         </div>
                     </div>
                 );
@@ -288,39 +269,35 @@
                     <header className="bg-slate-800 border-b border-slate-700 px-8 py-4 flex justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-6">
                             <div className="bg-white p-1 rounded-xl overflow-hidden flex items-center justify-center shadow-lg w-28 h-28 shrink-0">
-                                <img 
-                                    src="Logo_UVM.png" 
-                                    alt="Logo UVM" 
-                                    className="max-w-full max-h-full object-contain" 
-                                    onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} 
-                                />
+                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} />
                             </div>
                             <div>
                                 <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br/> y Ciencias Agroambientales</h1>
-                                <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mt-2 italic text-xs">Sistema Informativo de Horarios • Universidad Viña del Mar</p>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mt-2 italic text-xs">Gestión Centralizada • Universidad Viña del Mar</p>
                             </div>
                         </div>
-                        <div className="text-right flex items-center gap-8">
+                        <div className="flex items-center gap-8">
                             <div className="text-right">
                                 <div className="text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                 <div className="text-[11px] text-slate-500 uppercase font-black mt-3 tracking-[0.2em]">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             
-                            {/* BOTÓN DE GUARDADO MANUAL */}
+                            {/* BOTÓN DISQUETE - GUARDADO MANUAL */}
                             <button 
-                                onClick={manualSave}
-                                title="Guardar cambios ahora"
-                                className={`transition-all duration-300 p-4 rounded-2xl border-2 active:scale-90 ${
-                                    saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-50 cursor-default' : 
-                                    saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin cursor-wait' : 'text-yellow-500 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] hover:scale-110'
+                                onClick={persistToCloud}
+                                className={`transition-all duration-300 p-5 rounded-2xl border-4 active:scale-95 ${
+                                    saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
+                                    saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin' : 
+                                    'text-yellow-500 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.4)] animate-bounce'
                                 }`}
+                                title={saveStatus === 'pending' ? "Presione para guardar ahora" : "Datos sincronizados"}
                             >
-                                <Icon name="Save" size={36} />
+                                <Icon name="Save" size={40} />
                             </button>
                         </div>
                     </header>
 
-                    {/* BANNER DINÁMICO */}
+                    {/* BANNER CARRERA */}
                     <div className={`${career.color} py-5 px-8 flex justify-between items-center shadow-2xl sticky top-0 z-30 transition-colors duration-1000`}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-3 hover:bg-black/10 rounded-full transition-all text-white active:scale-90"><Icon name="ChevronLeft" size={44}/></button>
                         <div className="text-center text-white px-6">
@@ -335,27 +312,27 @@
                     <main className="flex-1 p-6 md:p-10 flex flex-col gap-10">
                         <div className="max-w-[1400px] mx-auto w-full flex flex-col gap-10">
                             
-                            {/* SELECTORES DE NAVEGACIÓN */}
+                            {/* SELECTORES */}
                             <div className="flex flex-col items-center gap-6">
                                 <div className="flex gap-2 bg-slate-800 p-2.5 rounded-3xl border border-slate-700 shadow-2xl">
                                     {YEARS.map(y => (
-                                        <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-10 py-3.5 rounded-2xl text-sm font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white shadow-xl scale-105 ring-4 ring-blue-500/20' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
+                                        <button key={y} onClick={() => {setSelectedYear(y); setIsAutoPlaying(false)}} className={`px-10 py-3.5 rounded-2xl text-sm font-black uppercase transition-all ${selectedYear === y ? 'bg-blue-600 text-white shadow-xl scale-105 ring-4 ring-blue-500/20 font-black' : 'text-slate-500 hover:text-slate-300'}`}>{y}er año</button>
                                     ))}
                                 </div>
                                 <div className="flex gap-6">
                                     <button onClick={() => setViewMode('daily')} className={`px-12 py-4 rounded-2xl font-black text-sm flex items-center gap-4 border-2 transition-all ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white shadow-2xl scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Clock" size={24}/> VISTA DIARIA</button>
-                                    <button onClick={() => setViewMode('weekly')} className={`px-12 py-4 rounded-2xl font-black text-sm flex items-center gap-4 border-2 transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white shadow-2xl scale-105' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Calendar" size={24}/> VISTA SEMANAL</button>
+                                    <button onClick={() => setViewMode('weekly')} className={`px-12 py-4 rounded-2xl font-black text-sm flex items-center gap-4 border-2 transition-all ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white shadow-2xl scale-105 font-black' : 'bg-slate-800 text-slate-400 border-slate-700'}`}><Icon name="Calendar" size={24}/> VISTA SEMANAL</button>
                                 </div>
                             </div>
 
                             <div className="w-full mb-24 text-sm">
                                 {viewMode === 'daily' ? (
                                     <div className="space-y-5 max-w-5xl mx-auto">
-                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.5em] mb-12 text-3xl italic drop-shadow-lg">Programación de {currentDayName}</h3>
+                                        <h3 className="text-center text-blue-400 font-black uppercase tracking-[0.5em] mb-12 text-3xl italic drop-shadow-lg font-black">Programación de {currentDayName}</h3>
                                         {HOURS.map((h, i) => {
                                             const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                             return (
-                                                <div key={i} className={`flex items-center p-7 rounded-[3rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[20px] border-blue-500 shadow-2xl' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
+                                                <div key={i} className={`flex items-center p-7 rounded-[3rem] transition-all duration-300 ${slot.subject ? 'bg-slate-800 border-l-[20px] border-blue-500 shadow-2xl scale-[1.01]' : 'opacity-20 border-2 border-dashed border-slate-700'}`}>
                                                     <div className="w-48 text-xl font-mono font-bold text-slate-400 shrink-0 leading-none">
                                                         <span className="text-xs text-blue-500 block uppercase mb-3 font-black tracking-widest text-xs">CLAVE {i+1}</span>{h}
                                                     </div>
@@ -378,8 +355,8 @@
                                                         </div>
                                                     ) : (
                                                         <div className="flex-1 ml-12 overflow-hidden text-left">
-                                                            <div className="text-4xl font-black uppercase tracking-tight subject-text mb-2">{slot.subject || "BLOQUE LIBRE"}</div>
-                                                            {slot.subject && <div className="text-blue-400 font-black uppercase text-xl mt-3 tracking-[0.2em] flex items-center gap-3"><Icon name="Monitor" size={22}/> SALA {slot.room}</div>}
+                                                            <div className="text-4xl font-black uppercase tracking-tight subject-text mb-2 font-black">{slot.subject || "BLOQUE LIBRE"}</div>
+                                                            {slot.subject && <div className="text-blue-400 font-black uppercase text-xl mt-3 tracking-[0.2em] flex items-center gap-3 font-black"><Icon name="Monitor" size={22}/> SALA {slot.room}</div>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -389,9 +366,9 @@
                                 ) : (
                                     <div className="overflow-x-auto pb-10">
                                         <div className="weekly-grid">
-                                            <div className="h-16 flex items-center justify-center font-black text-slate-600 uppercase text-xs tracking-widest italic">Clave</div>
+                                            <div className="h-16 flex items-center justify-center font-black text-slate-600 uppercase text-xs tracking-widest italic font-black">Clave</div>
                                             {DAYS.map(day => (
-                                                <div key={day} className={`p-5 rounded-2xl text-center font-black text-sm uppercase tracking-[0.2em] shadow-xl ${day === currentDayName ? 'bg-blue-600 shadow-2xl scale-105 ring-4 ring-blue-400/30 font-black' : 'bg-slate-700 text-slate-400'}`}>{day}</div>
+                                                <div key={day} className={`p-5 rounded-2xl text-center font-black text-sm uppercase tracking-[0.2em] shadow-xl ${day === currentDayName ? 'bg-blue-600 shadow-2xl scale-105 ring-4 ring-blue-400/30 font-black' : 'bg-slate-700 text-slate-400 font-black'}`}>{day}</div>
                                             ))}
 
                                             {HOURS.map((h, hIdx) => (
@@ -404,15 +381,15 @@
                                                     {DAYS.map(day => {
                                                         const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
                                                         return (
-                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[160px] h-auto flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
+                                                            <div key={day + hIdx} className={`p-4 rounded-[2rem] min-h-[180px] h-auto flex flex-col justify-start border-2 transition-all ${slot.subject ? 'bg-slate-800 border-slate-600 ring-2 ring-white/5 shadow-2xl' : 'bg-slate-800/10 border-slate-800 opacity-20'}`}>
                                                                 <div className="text-[9px] font-mono text-slate-500 mb-2 font-black uppercase leading-none border-b border-slate-700/50 pb-2 italic">CLAVE {hIdx+1}</div>
                                                                 
                                                                 {isAdminMode ? (
                                                                     <div className="flex flex-col gap-2 mt-1">
                                                                         <textarea 
-                                                                            rows="3"
+                                                                            rows="4"
                                                                             placeholder="Asignatura..."
-                                                                            className="input-admin-sm resize-none"
+                                                                            className="input-admin-sm resize-none font-bold"
                                                                             value={slot.subject}
                                                                             onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)}
                                                                         />
@@ -426,10 +403,10 @@
                                                                     </div>
                                                                 ) : (
                                                                     <Fragment>
-                                                                        <div className="text-[13px] font-black leading-tight uppercase tracking-tight text-white/90 mb-3 subject-text">
+                                                                        <div className="text-[14px] font-black leading-tight uppercase tracking-tight text-white/90 mb-3 subject-text font-black">
                                                                             {slot.subject}
                                                                         </div>
-                                                                        {slot.subject && <div className="text-[11px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none">SALA {slot.room}</div>}
+                                                                        {slot.subject && <div className="text-[11px] text-blue-400 font-black mt-auto uppercase italic tracking-widest leading-none font-black">SALA {slot.room}</div>}
                                                                     </Fragment>
                                                                 )}
                                                             </div>
@@ -450,15 +427,15 @@
                             <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
                                 <Icon name={isAutoPlaying ? "Pause" : "Play"} size={24}/> {isAutoPlaying ? 'ROTACIÓN ACTIVADA' : 'ROTACIÓN PAUSADA'}
                             </button>
-                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
-                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={24}/> {isAdminMode ? 'CERRAR GESTIÓN' : 'MODO ADMINISTRADOR'}
+                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex items-center gap-5 px-8 py-4 rounded-2xl border-2 transition-all ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-2xl font-black font-black' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
+                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={24}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMINISTRADOR'}
                             </button>
                         </div>
                         <div className="flex flex-col items-end gap-3 text-slate-500 italic uppercase">
                             <div className="flex items-center gap-4 bg-slate-900/50 px-5 py-2 rounded-full">
-                                <span className={`${saveStatus === 'saved' ? 'text-green-500' : 'text-yellow-500'} font-black text-[10px]`}>
+                                <span className={`${saveStatus === 'saved' ? 'text-green-500 font-black' : 'text-yellow-500 font-black'} font-black text-[10px]`}>
                                     {saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 
-                                     saveStatus === 'saving' ? 'GUARDANDO EN NUBE...' : 'CAMBIOS PENDIENTES - PULSE EL DISQUETE'}
+                                     saveStatus === 'saving' ? 'PROCESANDO EN NUBE...' : 'MODIFICACIONES PENDIENTES - PULSE EL DISQUETE'}
                                 </span>
                                 <Icon name="Monitor" size={24}/> FINCA 2026
                             </div>
@@ -468,14 +445,14 @@
                     {/* MODAL PASSWORD */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-8 text-white text-center">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-16 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10">
+                            <div className="bg-slate-800 border-2 border-slate-700 p-16 rounded-[4rem] shadow-[0_0_150px_rgba(0,0,0,0.9)] max-w-xl w-full ring-1 ring-white/10 font-black">
                                 <div className="mb-12 text-blue-500 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.5)]"><Icon name="Lock" size={100} /></div>
-                                <h3 className="text-4xl font-black uppercase mb-6 tracking-tighter">Acceso de Gestión</h3>
-                                <p className="text-slate-400 text-lg mb-14 px-8 leading-relaxed font-medium">Ingrese la contraseña institucional para habilitar la edición de contenidos.</p>
+                                <h3 className="text-4xl font-black uppercase mb-6 tracking-tighter">Acceso Institucional</h3>
+                                <p className="text-slate-400 text-lg mb-14 px-8 leading-relaxed font-medium">Ingrese la contraseña para habilitar la edición de contenidos de la Facultad.</p>
                                 <input 
                                     type="password" 
                                     placeholder="CONTRASEÑA" 
-                                    className={`w-full bg-slate-900 border-4 ${passError ? 'border-red-500 animate-shake shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'border-slate-700'} rounded-3xl p-8 text-center text-6xl font-black mb-12 outline-none focus:border-blue-500 tracking-[0.5em] text-white uppercase shadow-inner`} 
+                                    className="w-full bg-slate-900 border-4 border-slate-700 rounded-3xl p-8 text-center text-6xl font-black mb-12 outline-none focus:border-blue-500 tracking-[0.5em] text-white uppercase shadow-inner"
                                     value={passwordInput} 
                                     onChange={e => setPasswordInput(e.target.value)} 
                                     onKeyDown={e => e.key === 'Enter' && (passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true))} 
