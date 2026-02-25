@@ -84,7 +84,14 @@
         // --- INSTRUCCIONES PARA EL USUARIO (IMPORTANTE PARA GITHUB) ---
         // Si usas este archivo en GitHub, debes crear un proyecto en console.firebase.google.com
         // y reemplazar este objeto por el que te dé Google.
-        const myCustomFirebaseConfig = null; // Pega aquí tu config si tienes una propia
+        const myCustomFirebaseConfig = {
+          apiKey: "AIzaSyCjXzraYD1gVajJgLedKTQ4SusoLM5fzLM",
+          authDomain: "horarios-uvm.firebaseapp.com",
+          projectId: "horarios-uvm",
+          storageBucket: "horarios-uvm.firebasestorage.app",
+          messagingSenderId: "378691379033",
+          appId: "1:378691379033:web:ac841cf0d1d2446a7af648"
+        }; // Pega aquí tu config si tienes una propia
 
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myCustomFirebaseConfig;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'finca-uvm-app';
@@ -469,3 +476,4 @@
     </script>
 </body>
 </html>
+
