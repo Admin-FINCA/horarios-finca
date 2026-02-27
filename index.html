@@ -482,30 +482,29 @@
                             </div>
                         </div>
                     )}
-
-                    {/* MODAL PASSWORD RESPONSIVO */}
+                    
+					{/* MODAL PASSWORD - ÚNICO ELEMENTO MODIFICADO EN TAMAÑO */}
                     {showPassModal && (
-                        <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4 md:p-8 text-white text-center">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-16 rounded-3xl md:rounded-[4rem] shadow-2xl max-w-xl w-full ring-1 ring-white/10 font-black">
-                                <div className="mb-8 md:mb-12 text-blue-500 flex justify-center"><Icon name="Lock" size={60} className="md:w-24 md:h-24" /></div>
-                                <h3 className="text-xl md:text-4xl font-black uppercase mb-4 md:mb-6 tracking-tighter font-black">Acceso Institucional</h3>
-                                <p className="text-slate-400 text-xs md:text-lg mb-8 md:mb-14 px-4 md:px-8 leading-relaxed font-medium">Ingrese la contraseña para habilitar la edición de contenidos de la Facultad.</p>
+                        <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
+                            <div className="bg-slate-800 border-2 border-slate-700 p-6 md:p-10 rounded-2xl md:rounded-3xl shadow-2xl max-w-sm w-full ring-1 ring-white/10 font-black">
+                                <div className="mb-6 text-blue-500 flex justify-center"><Icon name="Lock" size={40} /></div>
+                                <h3 className="text-lg md:text-xl font-black uppercase mb-3 text-center tracking-tighter font-black">Acceso Institucional</h3>
+                                <p className="text-slate-400 text-xs text-center mb-8 px-2 leading-relaxed">Ingrese la contraseña para habilitar la edición de contenidos de la Facultad.</p>
                                 <input 
                                     type="password" 
                                     placeholder="••••••••" 
-                                    className="w-full bg-slate-900 border-2 md:border-4 border-slate-700 rounded-xl md:rounded-3xl p-4 md:p-8 text-center text-4xl md:text-6xl font-black mb-8 md:mb-12 outline-none focus:border-blue-500 tracking-[0.3em] md:tracking-[0.5em] text-white uppercase shadow-inner"
+                                    className="w-full bg-slate-900 border-2 border-slate-700 rounded-xl p-3 md:p-4 text-center text-2xl font-black mb-8 outline-none focus:border-blue-500 tracking-[0.4em] text-white uppercase shadow-inner"
                                     value={passwordInput} 
                                     onChange={e => setPasswordInput(e.target.value)} 
                                     onKeyDown={e => e.key === 'Enter' && (passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true))} 
                                     autoFocus 
                                 />
-                                <div className="flex gap-4 md:gap-6">
-                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-4 md:py-7 rounded-xl md:rounded-[2rem] font-black text-white hover:bg-slate-600 transition-all uppercase text-[10px] md:text-sm tracking-widest italic font-black">Cancelar</button>
-                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-4 md:py-7 rounded-xl md:rounded-[2rem] font-black text-white shadow-2xl active:scale-95 transition-all uppercase text-[10px] md:text-sm tracking-widest hover:bg-blue-500 font-black">Acceder</button>
+                                <div className="flex gap-4">
+                                    <button onClick={() => {setShowPassModal(false); setPasswordInput(''); setPassError(false);}} className="flex-1 bg-slate-700 py-3 rounded-xl font-black text-white hover:bg-slate-600 transition-all uppercase text-[10px] tracking-widest italic">Cancelar</button>
+                                    <button onClick={() => passwordInput === 'FINCA@2026' ? (setIsAdminMode(true), setShowPassModal(false), setPasswordInput('')) : setPassError(true)} className="flex-1 bg-blue-600 py-3 rounded-xl font-black text-white shadow-2xl active:scale-95 transition-all uppercase text-[10px] tracking-widest">Acceder</button>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        </div>                    
                 </div>
             );
         };
@@ -515,3 +514,4 @@
     </script>
 </body>
 </html>
+
