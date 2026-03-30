@@ -28,9 +28,12 @@ const { useState, useEffect } = React;
 
 /* ================= FIREBASE ================= */
 const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_AUTH_DOMAIN",
-    projectId: "TU_PROJECT_ID"
+            apiKey: "AIzaSyCjXzraYD1gVajJgLedKTQ4SusoLM5fzLM",
+            authDomain: "horarios-uvm.firebaseapp.com",
+            projectId: "horarios-uvm",
+            storageBucket: "horarios-uvm.firebasestorage.app",
+            messagingSenderId: "378691379033",
+            appId: "1:378691379033:web:ac841cf0d1d2446a7af648"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -50,7 +53,7 @@ const App = () => {
 
     const [data, setData] = useState([]);
 
-    const ADMIN_UIDS = ["TU_UID_ADMIN_AQUI"];
+    const ADMIN_UIDS = ["6HmCH1dusWV0UGPU2gST4AUaCrJ2"];
 
     /* ===== AUTH ===== */
     useEffect(() => {
