@@ -30,6 +30,7 @@
             scroll-behavior: smooth;
         }
 
+        /* Estética del Scroll */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; border: 2px solid #0f172a; }
@@ -63,6 +64,21 @@
             outline: none;
             min-height: 35px;
         }
+
+        /* Campos de Login Manual */
+        .login-input {
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #334155;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            color: white;
+            width: 100%;
+            font-weight: 600;
+            outline: none;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .login-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
 
         .weekly-grid {
             display: grid;
@@ -102,9 +118,6 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        /* 🔐 UID ADMINISTRADOR AUTORIZADO */
-        const ADMIN_UID = "6HmCH1dusWV0UGPU2gST4AUaCrJ2";
-
         const CAREERS = [
             { id: "industrial", name: "Ingeniería Civil Industrial", color: "bg-blue-600" },
             { id: "informatica", name: "Ingeniería Civil Informática", color: "bg-green-600" },
@@ -140,8 +153,7 @@
                 Wifi: <Fragment><path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Fragment>,
                 WifiOff: <Fragment><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.58 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Fragment>,
                 HelpCircle: <Fragment><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></Fragment>,
-                X: <Fragment><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Fragment>,
-                Google: <Fragment><path d="M12 5.42c1.93 0 3.48.66 4.66 1.78l3.48-3.48C18.04 1.76 15.28 1 12 1 7.58 1 3.84 3.55 2.04 7.24l4.08 3.16C7.12 7.74 9.3 5.42 12 5.42z" fill="#EA4335"/><path d="M23.49 12.27c0-.82-.07-1.61-.21-2.38H12v4.51h6.44c-.28 1.51-1.13 2.78-2.4 3.64l3.73 2.89c2.18-2.01 3.44-4.97 3.44-8.66z" fill="#4285F4"/><path d="M6.12 14.76c-.24-.71-.38-1.47-.38-2.26s.14-1.55.38-2.26L2.04 7.24C1.3 8.67 1 10.29 1 12s.3 3.33 1.04 4.76l4.08-3.16z" fill="#FBBC05"/><path d="M12 23c3.28 0 6.04-1.08 8.05-2.92l-3.73-2.89c-1.1.73-2.5 1.17-4.32 1.17-2.7 0-4.88-1.83-5.88-4.3l-4.08 3.16C3.84 20.45 7.58 23 12 23z" fill="#34A853"/></Fragment>
+                X: <Fragment><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Fragment>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name]}</svg>;
         };
@@ -156,52 +168,34 @@
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [showPassModal, setShowPassModal] = useState(false);
             const [showFAQ, setShowFAQ] = useState(false);
+            
+            // Estados para Login Manual
+            const [userInput, setUserInput] = useState('');
+            const [passwordInput, setPasswordInput] = useState('');
+            const [isLoggingIn, setIsLoggingIn] = useState(false);
             const [passError, setPassError] = useState(false);
+
             const [schedules, setSchedules] = useState({});
             const [saveStatus, setSaveStatus] = useState('saved'); 
             const [isSystemReady, setIsSystemReady] = useState(false);
             const [isOffline, setIsOffline] = useState(true);
 
-            /* 🔥 LOGIN REAL CON GOOGLE Y RESTRICCIÓN UID */
+            // Iniciar Sesión Anónima para lectura inicial
             useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged(u => {
-                    setUser(u);
-                    if (u && u.uid === ADMIN_UID) {
-                        setIsAdminMode(true);
-                    } else {
-                        setIsAdminMode(false);
-                    }
+                const initAuth = async () => {
+                    try {
+                        const credential = await auth.signInAnonymously();
+                        setUser(credential.user);
+                        setIsOffline(false);
+                    } catch (e) { console.error(e); setIsOffline(true); }
                     setIsSystemReady(true);
-                });
-                return () => unsubscribe();
+                };
+                initAuth();
             }, []);
 
-            const loginAdmin = async () => {
-                try {
-                    const provider = new firebase.auth.GoogleAuthProvider();
-                    const result = await auth.signInWithPopup(provider);
-
-                    if (result.user.uid === ADMIN_UID) {
-                        setIsAdminMode(true);
-                        setShowPassModal(false);
-                        setPassError(false);
-                    } else {
-                        setPassError(true);
-                        auth.signOut();
-                    }
-                } catch (err) {
-                    console.error(err);
-                    setPassError(true);
-                }
-            };
-
-            const logoutAdmin = () => {
-                auth.signOut();
-                setIsAdminMode(false);
-            };
-
+            // Escuchar cambios en la Base de Datos
             useEffect(() => {
-                if (!isSystemReady) return;
+                if (!isSystemReady || !user) return;
                 const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
@@ -209,7 +203,7 @@
                     setIsOffline(false);
                 }, (err) => { console.error(err); setIsOffline(true); });
                 return () => unsubscribe();
-            }, [isSystemReady]);
+            }, [isSystemReady, user]);
 
             useEffect(() => {
                 const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -221,8 +215,41 @@
                 return () => { clearInterval(t); clearInterval(r); };
             }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
 
+            // --- LÓGICA DE LOGIN MANUAL ---
+            const handleManualLogin = async () => {
+                if (!userInput || !passwordInput) return;
+                setIsLoggingIn(true);
+                setPassError(false);
+
+                try {
+                    // Consulta el documento de credenciales en la DB
+                    const doc = await db.collection('admin_auth').doc('credentials').get();
+                    
+                    if (doc.exists) {
+                        const data = doc.data();
+                        // Compara Usuario y Contraseña
+                        if (userInput === data.username && passwordInput === data.password) {
+                            setIsAdminMode(true);
+                            setShowPassModal(false);
+                            setUserInput('');
+                            setPasswordInput('');
+                        } else {
+                            setPassError(true);
+                        }
+                    } else {
+                        console.error("No existe el documento de credenciales en admin_auth/credentials");
+                        setPassError(true);
+                    }
+                } catch (e) {
+                    console.error("Error en login:", e);
+                    setPassError(true);
+                } finally {
+                    setIsLoggingIn(false);
+                }
+            };
+
             const persistToCloud = useCallback(async (forcedData = null) => {
-                if (isOffline) return;
+                if (!user || isOffline) return;
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
@@ -232,7 +259,7 @@
                     await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
                 } catch (e) { console.error(e); setSaveStatus('pending'); }
-            }, [isOffline, currentCareerIdx, selectedYear, schedules]);
+            }, [user, isOffline, currentCareerIdx, selectedYear, schedules]);
 
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
                 if (!isAdminMode) return;
@@ -251,7 +278,7 @@
             const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse text-sm">Conectando Servidor UVM...</div>;
+            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando Facultad UVM...</div>;
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
@@ -260,7 +287,7 @@
                     <header className="bg-slate-800 border-b border-slate-700 px-4 md:px-8 py-3 md:py-5 flex flex-wrap justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-3 md:gap-6">
                             <div className="bg-white p-1 rounded-xl shadow-lg w-16 h-16 md:w-28 md:h-28 flex items-center justify-center overflow-hidden shrink-0">
-                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" />
+                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} />
                             </div>
                             <div>
                                 <h1 className="text-sm md:text-xl lg:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br className="hidden md:block"/> y Ciencias Agroambientales</h1>
@@ -269,8 +296,8 @@
                         </div>
                         <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
                             <div className="text-right">
-                                <div className="text-xl md:text-3xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                                <div className="text-xl md:text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-3 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
                                 <button onClick={() => persistToCloud()} disabled={isOffline || saveStatus === 'saving'} className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 ${isOffline ? 'text-gray-600' : saveStatus === 'saved' ? 'text-green-500 border-green-500/20' : 'text-yellow-500 border-yellow-500 animate-bounce'}`}><Icon name={isOffline ? "WifiOff" : "Save"} size={32} /></button>
@@ -281,7 +308,7 @@
                     <div className={`${career.color} py-3 md:py-5 px-4 md:px-8 flex justify-between items-center shadow-2xl sticky top-0 z-10 transition-colors duration-1000`}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 md:p-3 text-white"><Icon name="ChevronLeft" size={32} /></button>
                         <div className="text-center font-black flex-1">
-                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl">{career.name}</h2>
+                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl leading-none">{career.name}</h2>
                             <div className="flex items-center justify-center gap-2 md:gap-4 mt-1 md:mt-2 opacity-90 uppercase text-[7px] md:text-[10px] tracking-widest font-black">
                                 <Icon name="GraduationCap" size={12} /> {selectedYear}{selectedYear === "1" || selectedYear === "3" ? "ER" : selectedYear === "2" ? "DO" : "TO"} AÑO ACADÉMICO • CARRERA {currentCareerIdx+1}/8
                             </div>
@@ -307,19 +334,19 @@
                                     {HOURS.map((h, i) => {
                                         const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                         return (
-                                            <div key={i} className={`flex items-center p-4 md:p-7 rounded-2xl bg-slate-800 border-l-[10px] ${slot.subject ? 'border-blue-500' : 'opacity-20 border-dashed border-slate-700'}`}>
+                                            <div key={i} className={`flex items-center p-4 md:p-7 rounded-2xl bg-slate-800 border-l-[10px] ${slot.subject ? 'border-blue-500 shadow-lg' : 'opacity-20 border-dashed border-slate-700'}`}>
                                                 <div className="w-24 md:w-48 text-xs md:text-lg font-mono font-bold text-slate-200 shrink-0">
-                                                    <span className="text-[8px] md:text-[10px] text-slate-50 block font-black">CLAVE {i+1}</span>{h}
+                                                    <span className="text-[8px] md:text-[10px] text-slate-50 block font-black uppercase">CLAVE {i+1}</span>{h}
                                                 </div>
                                                 {isAdminMode ? (
                                                     <div className="flex-1 flex flex-col md:flex-row gap-2 ml-4">
                                                         <textarea rows="1" placeholder="Materia..." className="input-admin text-sm" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
-                                                        <input type="text" placeholder="Aula" className="input-admin w-24 text-center text-blue-400" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
+                                                        <input type="text" placeholder="Aula" className="input-admin w-24 text-center text-blue-400 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
                                                     </div>
                                                 ) : (
                                                     <div className="flex-1 ml-4 overflow-hidden font-black">
                                                         <div className="text-lg md:text-3xl uppercase truncate">{slot.subject || "BLOQUE LIBRE"}</div>
-                                                        {slot.subject && <div className="text-blue-400 uppercase text-[10px] md:text-lg">SALA {slot.room}</div>}
+                                                        {slot.subject && <div className="text-blue-400 uppercase text-[10px] md:text-lg italic">SALA {slot.room}</div>}
                                                     </div>
                                                 )}
                                             </div>
@@ -334,16 +361,16 @@
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
                                                 <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-50">
-                                                    <span className="font-black text-slate-50">C{hIdx + 1}</span>
-                                                    <span className="mt-1 text-[7px] md:text-[9px] text-slate-100">{h.split(' - ')[0]}</span>
+                                                    <span className="font-black">C{hIdx + 1}</span>
+                                                    <span className="mt-1 text-[7px] md:text-[9px] text-white/50">{h.split(' - ')[0]}</span>
                                                 </div>
                                                 {DAYS.map(day => {
                                                     const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
                                                     return (
                                                         <div key={day + hIdx} className={`p-2 rounded-xl min-h-[45px] flex flex-col border ${slot.subject ? 'bg-slate-800 border-slate-600 shadow-2xl' : 'bg-slate-800/10 opacity-20'}`}>
-                                                            <div className="text-[7px] md:text-[9px] font-mono text-slate-50 border-b border-slate-700 pb-1 mb-1">CLAVE {hIdx+1}</div>
-                                                            {isAdminMode ? <div className="flex flex-col gap-1 h-full"><textarea className="input-admin-sm text-[9px]" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} /><input className="input-admin-sm text-center text-blue-400 py-0.5" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} /></div>
-                                                            : <Fragment><div className="text-[10px] md:text-[13px] font-black leading-tight text-white/90 truncate">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-blue-400 font-black mt-auto">SALA {slot.room}</div>}</Fragment>}
+                                                            <div className="text-[7px] md:text-[9px] font-mono text-slate-50 border-b border-slate-700 pb-1 mb-1 italic uppercase font-black">CLAVE {hIdx+1}</div>
+                                                            {isAdminMode ? <div className="flex flex-col gap-1 h-full"><textarea className="input-admin-sm text-[9px] font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} /><input className="input-admin-sm text-center text-blue-400 py-0.5 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} /></div>
+                                                            : <Fragment><div className="text-[10px] md:text-[13px] font-black leading-tight text-white/90 truncate uppercase">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-blue-400 font-black mt-auto italic">SALA {slot.room}</div>}</Fragment>}
                                                         </div>
                                                     );
                                                 })}
@@ -357,23 +384,24 @@
 
                     <footer className="bg-slate-800 border-t border-slate-700 p-4 md:p-8 flex flex-wrap justify-between items-center gap-4 shrink-0 shadow-2xl">
                         <div className="flex gap-3 md:gap-6 w-full md:w-auto">
-                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
-                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase">{isAutoPlaying ? 'ROTACIÓN ON' : 'PAUSA'}</span>
+                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
+                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAutoPlaying ? 'ROTACIÓN ON' : 'PAUSA'}</span>
                             </button>
-                            <button onClick={() => isAdminMode ? logoutAdmin() : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAdminMode ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
-                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase">{isAdminMode ? 'SALIR' : 'ADMIN'}</span>
+                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
+                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMIN'}</span>
                             </button>
                         </div>
                         <div className="flex items-center gap-4 bg-slate-900/50 px-4 md:px-8 py-2 md:py-3 rounded-full border border-slate-700 shadow-inner ml-auto md:ml-0">
                             <div className={`flex items-center gap-2 ${isOffline ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
                                 <Icon name={isOffline ? "WifiOff" : "Wifi"} size={18} />
-                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-tighter">{isOffline ? 'SIN CONEXIÓN' : saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 'GUARDANDO...'}</span>
+                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 'CAMBIOS PENDIENTES'}</span>
                             </div>
                             <div className="h-4 w-px bg-slate-700"></div>
-                            <div className="flex items-center gap-2 text-slate-500 font-black italic"><Icon name="Monitor" size={18}/><span className="font-black text-[9px] md:text-[11px]">FINCA 2026</span></div>
+                            <div className="flex items-center gap-2 text-slate-500 font-black italic uppercase"><Icon name="Monitor" size={18}/><span className="font-black text-[9px] md:text-[11px]">FINCA 2026</span></div>
                         </div>
                     </footer>
 
+                    {/* MODAL FAQ */}
                     {showFAQ && (
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-4">
                             <div className="bg-slate-900 border-2 border-slate-700 p-6 md:p-12 rounded-3xl max-w-3xl w-full relative max-h-[85vh] overflow-y-auto">
@@ -381,36 +409,68 @@
                                 <div className="mb-6 text-blue-500 flex justify-center"><Icon name="HelpCircle" size={60} /></div>
                                 <h3 className="text-2xl md:text-4xl font-black uppercase text-center mb-6">Ayuda y FAQ</h3>
                                 <div className="space-y-4">
-                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Qué son las Claves?</h4><p className="text-slate-300 text-xs">Bloques de 45 min de 08:20 a 20:45 hrs.</p></div>
-                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Cómo editar?</h4><p className="text-slate-300 text-xs">Modo Admin -> Login Google -> Editar -> Guardar.</p></div>
+                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Qué son las Claves?</h4><p className="text-slate-300 text-xs">Bloques horarios de 45 min. Hay 15 claves diarias cubriendo de 08:20 a 20:45 hrs.</p></div>
+                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Cómo editar los horarios?</h4><p className="text-slate-300 text-xs">Debe entrar al <strong>Modo Administrador</strong> con su usuario y clave. Guarde cambios pulsando el icono del disquete.</p></div>
                                 </div>
-                                <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-slate-700 py-4 px-8 rounded-2xl font-black text-white uppercase text-xs">Cerrar</button></div>
+                                <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-slate-700 py-4 px-8 rounded-2xl font-black text-white uppercase text-xs">Cerrar Ayuda</button></div>
                             </div>
                         </div>
                     )}
 
+                    {/* MODAL LOGIN MANUAL - ACTUALIZADO */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-6 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl text-center">
+                            <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl">
                                 <div className="mb-6 text-blue-500 flex justify-center"><Icon name="Lock" size={40} /></div>
-                                <h3 className="text-lg font-black uppercase mb-3">Acceso Administrador</h3>
-                                <p className="text-slate-400 text-xs mb-8 px-2">Solo los correos autorizados por la Facultad pueden editar contenidos.</p>
+                                <h3 className="text-lg md:text-xl font-black uppercase text-center mb-2">Acceso Administrador</h3>
+                                <p className="text-slate-400 text-xs text-center mb-8 px-2">Solo personal autorizado por la Facultad puede editar contenidos.</p>
                                 
-                                <button 
-                                    onClick={loginAdmin}
-                                    className="w-full bg-white text-slate-900 px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-4 hover:bg-slate-100 transition-all active:scale-95 mb-4 shadow-xl shadow-white/10"
-                                >
-                                    <Icon name="Google" size={24} />
-                                    Iniciar sesión con Google
-                                </button>
+                                <div className="space-y-4 mb-8">
+                                    <div>
+                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">Nombre de Usuario</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="USUARIO" 
+                                            className="login-input uppercase"
+                                            value={userInput} 
+                                            onChange={e => setUserInput(e.target.value)} 
+                                            onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">Contraseña Institucional</label>
+                                        <input 
+                                            type="password" 
+                                            placeholder="••••••••" 
+                                            className="login-input"
+                                            value={passwordInput} 
+                                            onChange={e => setPasswordInput(e.target.value)} 
+                                            onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
+                                        />
+                                    </div>
+                                </div>
 
                                 {passError && (
-                                    <p className="text-red-500 text-[10px] font-bold mb-4 uppercase animate-shake">
-                                        ❌ Usuario no autorizado para gestión
+                                    <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">
+                                        ❌ Credenciales no autorizadas
                                     </p>
                                 )}
 
-                                <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="block mx-auto mt-4 text-slate-500 hover:text-white transition-all uppercase text-[10px] tracking-widest font-black italic">Cancelar Acceso</button>
+                                <div className="flex gap-4">
+                                    <button 
+                                        onClick={() => {setShowPassModal(false); setUserInput(''); setPasswordInput(''); setPassError(false);}} 
+                                        className="flex-1 bg-slate-700 py-4 rounded-xl font-black text-white uppercase text-[10px] tracking-widest hover:bg-slate-600 transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button 
+                                        onClick={handleManualLogin}
+                                        disabled={isLoggingIn}
+                                        className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
+                                    >
+                                        {isLoggingIn ? 'Verificando...' : 'Acceder'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
