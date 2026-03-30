@@ -118,6 +118,9 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        /* 🔐 VARIABLE ADMIN_UID REQUERIDA */
+        const ADMIN_UID = "6HmCH1dusWV0UGPU2gST4AUaCrJ2";
+
         const CAREERS = [
             { id: "industrial", name: "Ingeniería Civil Industrial", color: "bg-blue-600" },
             { id: "informatica", name: "Ingeniería Civil Informática", color: "bg-green-600" },
@@ -215,20 +218,20 @@
                 return () => { clearInterval(t); clearInterval(r); };
             }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
 
-            // --- LÓGICA DE LOGIN MANUAL ---
+            // --- LÓGICA DE LOGIN MANUAL ACTUALIZADA (SÓLO MINÚSCULAS) ---
             const handleManualLogin = async () => {
                 if (!userInput || !passwordInput) return;
                 setIsLoggingIn(true);
                 setPassError(false);
 
                 try {
-                    // Consulta el documento de credenciales en la DB
                     const doc = await db.collection('admin_auth').doc('credentials').get();
                     
                     if (doc.exists) {
                         const data = doc.data();
-                        // Compara Usuario y Contraseña
-                        if (userInput === data.username && passwordInput === data.password) {
+                        // COMPARACIÓN FORZADA A MINÚSCULAS
+                        if (userInput.toLowerCase() === data.username.toLowerCase() && 
+                            passwordInput.toLowerCase() === data.password.toLowerCase()) {
                             setIsAdminMode(true);
                             setShowPassModal(false);
                             setUserInput('');
@@ -237,11 +240,9 @@
                             setPassError(true);
                         }
                     } else {
-                        console.error("No existe el documento de credenciales en admin_auth/credentials");
                         setPassError(true);
                     }
                 } catch (e) {
-                    console.error("Error en login:", e);
                     setPassError(true);
                 } finally {
                     setIsLoggingIn(false);
@@ -417,7 +418,7 @@
                         </div>
                     )}
 
-                    {/* MODAL LOGIN MANUAL - ACTUALIZADO */}
+                    {/* MODAL LOGIN MANUAL - ACTUALIZADO A MINÚSCULAS */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
                             <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl">
@@ -427,22 +428,22 @@
                                 
                                 <div className="space-y-4 mb-8">
                                     <div>
-                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">Nombre de Usuario</label>
+                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">nombre de usuario</label>
                                         <input 
                                             type="text" 
-                                            placeholder="USUARIO" 
-                                            className="login-input uppercase"
+                                            placeholder="usuario" 
+                                            className="login-input lowercase"
                                             value={userInput} 
                                             onChange={e => setUserInput(e.target.value)} 
                                             onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">Contraseña Institucional</label>
+                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">contraseña institucional</label>
                                         <input 
                                             type="password" 
                                             placeholder="••••••••" 
-                                            className="login-input"
+                                            className="login-input lowercase"
                                             value={passwordInput} 
                                             onChange={e => setPasswordInput(e.target.value)} 
                                             onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
