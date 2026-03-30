@@ -183,52 +183,23 @@
             const [isSystemReady, setIsSystemReady] = useState(false);
             const [isOffline, setIsOffline] = useState(true);
 
-            // Iniciar Sesión Anónima para lectura inicial
+            /* 🔥 MONITOR DE AUTENTICACIÓN REAL */
             useEffect(() => {
-                const initAuth = async () => {
-                    try {
-                        const credential = await auth.signInAnonymously();
-                        setUser(credential.user);
-                        setIsOffline(false);
-                    } catch (e) { console.error(e); setIsOffline(true); }
+                const unsubscribe = auth.onAuthStateChanged(u => {
+                    setUser(u);
+                    if (u && u.uid === ADMIN_UID) {
+                        setIsAdminMode(true);
+                    } else {
+                        setIsAdminMode(false);
+                    }
                     setIsSystemReady(true);
-                };
-                initAuth();
+                });
+                return () => unsubscribe();
             }, []);
-
-            const handleManualLogin = async () => {
-    if (!userInput || !passwordInput) return;
-
-    setIsLoggingIn(true);
-    setPassError(false);
-
-    try {
-        const cred = await auth.signInWithEmailAndPassword(
-            userInput.trim(),
-            passwordInput.trim()
-        );
-
-        if (cred.user.uid === ADMIN_UID) {
-            setIsAdminMode(true);
-            setShowPassModal(false);
-            setUserInput('');
-            setPasswordInput('');
-        } else {
-            setPassError(true);
-            await auth.signOut();
-        }
-
-    } catch (error) {
-        console.error("Error login:", error.message);
-        setPassError(true);
-    } finally {
-        setIsLoggingIn(false);
-    }
-};
 
             // Escuchar cambios en la Base de Datos
             useEffect(() => {
-                if (!isSystemReady || !user) return;
+                if (!isSystemReady) return;
                 const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
@@ -236,7 +207,7 @@
                     setIsOffline(false);
                 }, (err) => { console.error(err); setIsOffline(true); });
                 return () => unsubscribe();
-            }, [isSystemReady, user]);
+            }, [isSystemReady]);
 
             useEffect(() => {
                 const t = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -248,31 +219,33 @@
                 return () => { clearInterval(t); clearInterval(r); };
             }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
 
-            // --- LÓGICA DE LOGIN MANUAL ACTUALIZADA (SÓLO MINÚSCULAS) ---
+            /* 🔥 NUEVA LÓGICA DE LOGIN MANUAL FIREBASE */
             const handleManualLogin = async () => {
                 if (!userInput || !passwordInput) return;
+
                 setIsLoggingIn(true);
                 setPassError(false);
 
                 try {
-                    const doc = await db.collection('admin_auth').doc('credentials').get();
-                    
-                    if (doc.exists) {
-                        const data = doc.data();
-                        // COMPARACIÓN FORZADA A MINÚSCULAS
-                        if (userInput.toLowerCase() === data.username.toLowerCase() && 
-                            passwordInput.toLowerCase() === data.password.toLowerCase()) {
-                            setIsAdminMode(true);
-                            setShowPassModal(false);
-                            setUserInput('');
-                            setPasswordInput('');
-                        } else {
-                            setPassError(true);
-                        }
+                    // Intento de login oficial con Firebase Auth
+                    const cred = await auth.signInWithEmailAndPassword(
+                        userInput.trim().toLowerCase(),
+                        passwordInput.trim().toLowerCase()
+                    );
+
+                    // Verificación estricta de UID administrador
+                    if (cred.user.uid === ADMIN_UID) {
+                        setIsAdminMode(true);
+                        setShowPassModal(false);
+                        setUserInput('');
+                        setPasswordInput('');
                     } else {
                         setPassError(true);
+                        await auth.signOut();
                     }
-                } catch (e) {
+
+                } catch (error) {
+                    console.error("Error login:", error.message);
                     setPassError(true);
                 } finally {
                     setIsLoggingIn(false);
@@ -280,7 +253,7 @@
             };
 
             const persistToCloud = useCallback(async (forcedData = null) => {
-                if (!user || isOffline) return;
+                if (!isAdminMode || isOffline) return;
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
@@ -290,7 +263,7 @@
                     await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
                 } catch (e) { console.error(e); setSaveStatus('pending'); }
-            }, [user, isOffline, currentCareerIdx, selectedYear, schedules]);
+            }, [isAdminMode, isOffline, currentCareerIdx, selectedYear, schedules]);
 
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
                 if (!isAdminMode) return;
@@ -309,7 +282,7 @@
             const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando Facultad UVM...</div>;
+            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Autenticando...</div>;
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
@@ -327,8 +300,8 @@
                         </div>
                         <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
                             <div className="text-right">
-                                <div className="text-xl md:text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-3 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                                <div className="text-xl md:text-3xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
                                 <button onClick={() => persistToCloud()} disabled={isOffline || saveStatus === 'saving'} className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 ${isOffline ? 'text-gray-600' : saveStatus === 'saved' ? 'text-green-500 border-green-500/20' : 'text-yellow-500 border-yellow-500 animate-bounce'}`}><Icon name={isOffline ? "WifiOff" : "Save"} size={32} /></button>
@@ -350,7 +323,7 @@
                     <main className="flex-1 p-4 md:p-10 flex flex-col gap-6">
                         <div className="flex flex-col items-center gap-4">
                             <div className="flex flex-wrap justify-center gap-1 md:gap-2 bg-slate-800 p-1.5 md:p-2.5 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl">
-                                {YEARS.map(y => <button key={y} onClick={() => setSelectedYear(y)} className={`px-4 md:px-10 py-2 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-black uppercase ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>{y}er año</button>)}
+                                {YEARS.map(y => <button key={y} onClick={() => setSelectedYear(y)} className={`px-4 md:px-10 py-2 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-black uppercase ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-50'}`}>{y}er año</button>)}
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => setViewMode('daily')} className={`px-6 md:px-12 py-2 md:py-4 rounded-xl border-2 font-black text-xs ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>DIARIO</button>
@@ -391,9 +364,9 @@
                                         {DAYS.map(day => <div key={day} className={`p-2 md:p-5 rounded-xl text-center font-black text-[10px] md:text-sm uppercase ${day === currentDayName ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>{day}</div>)}
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
-                                                <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-50">
-                                                    <span className="font-black">C{hIdx + 1}</span>
-                                                    <span className="mt-1 text-[7px] md:text-[9px] text-white/50">{h.split(' - ')[0]}</span>
+                                                <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-50 opacity-100">
+                                                    <span className="font-black text-slate-50">C{hIdx + 1}</span>
+                                                    <span className="mt-1 text-[7px] md:text-[9px] text-slate-100">{h.split(' - ')[0]}</span>
                                                 </div>
                                                 {DAYS.map(day => {
                                                     const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
@@ -418,7 +391,7 @@
                             <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
                                 <Icon name={isAutoPlaying ? "Pause" : "Play"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAutoPlaying ? 'ROTACIÓN ON' : 'PAUSA'}</span>
                             </button>
-                            <button onClick={() => isAdminMode ? setIsAdminMode(false) : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
+                            <button onClick={() => isAdminMode ? auth.signOut() : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
                                 <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMIN'}</span>
                             </button>
                         </div>
@@ -432,7 +405,6 @@
                         </div>
                     </footer>
 
-                    {/* MODAL FAQ */}
                     {showFAQ && (
                         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-4">
                             <div className="bg-slate-900 border-2 border-slate-700 p-6 md:p-12 rounded-3xl max-w-3xl w-full relative max-h-[85vh] overflow-y-auto">
@@ -441,27 +413,26 @@
                                 <h3 className="text-2xl md:text-4xl font-black uppercase text-center mb-6">Ayuda y FAQ</h3>
                                 <div className="space-y-4">
                                     <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Qué son las Claves?</h4><p className="text-slate-300 text-xs">Bloques horarios de 45 min. Hay 15 claves diarias cubriendo de 08:20 a 20:45 hrs.</p></div>
-                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Cómo editar los horarios?</h4><p className="text-slate-300 text-xs">Debe entrar al <strong>Modo Administrador</strong> con su usuario y clave. Guarde cambios pulsando el icono del disquete.</p></div>
+                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Cómo editar los horarios?</h4><p className="text-slate-300 text-xs">Entre al Modo Admin con sus credenciales institucionales. Guarde cambios pulsando el icono del disquete.</p></div>
                                 </div>
                                 <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-slate-700 py-4 px-8 rounded-2xl font-black text-white uppercase text-xs">Cerrar Ayuda</button></div>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL LOGIN MANUAL - ACTUALIZADO A MINÚSCULAS */}
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
                             <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl">
                                 <div className="mb-6 text-blue-500 flex justify-center"><Icon name="Lock" size={40} /></div>
                                 <h3 className="text-lg md:text-xl font-black uppercase text-center mb-2">Acceso Administrador</h3>
-                                <p className="text-slate-400 text-xs text-center mb-8 px-2">Solo personal autorizado por la Facultad puede editar contenidos.</p>
+                                <p className="text-slate-400 text-[10px] text-center mb-8 px-2 leading-tight">Ingrese su correo institucional y contraseña en minúsculas para editar contenidos.</p>
                                 
                                 <div className="space-y-4 mb-8">
                                     <div>
-                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">nombre de usuario</label>
+                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">usuario (correo)</label>
                                         <input 
-                                            type="text" 
-                                            placeholder="usuario" 
+                                            type="email" 
+                                            placeholder="correo@uvm.cl" 
                                             className="login-input lowercase"
                                             value={userInput} 
                                             onChange={e => setUserInput(e.target.value)} 
@@ -483,7 +454,7 @@
 
                                 {passError && (
                                     <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">
-                                        ❌ Credenciales no autorizadas
+                                        ❌ Acceso denegado: Datos incorrectos
                                     </p>
                                 )}
 
@@ -499,7 +470,7 @@
                                         disabled={isLoggingIn}
                                         className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
                                     >
-                                        {isLoggingIn ? 'Verificando...' : 'Acceder'}
+                                        {isLoggingIn ? 'Entrando...' : 'Acceder'}
                                     </button>
                                 </div>
                             </div>
