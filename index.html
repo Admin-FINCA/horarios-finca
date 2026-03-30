@@ -196,6 +196,36 @@
                 initAuth();
             }, []);
 
+            const handleManualLogin = async () => {
+    if (!userInput || !passwordInput) return;
+
+    setIsLoggingIn(true);
+    setPassError(false);
+
+    try {
+        const cred = await auth.signInWithEmailAndPassword(
+            userInput.trim(),
+            passwordInput.trim()
+        );
+
+        if (cred.user.uid === ADMIN_UID) {
+            setIsAdminMode(true);
+            setShowPassModal(false);
+            setUserInput('');
+            setPasswordInput('');
+        } else {
+            setPassError(true);
+            await auth.signOut();
+        }
+
+    } catch (error) {
+        console.error("Error login:", error.message);
+        setPassError(true);
+    } finally {
+        setIsLoggingIn(false);
+    }
+};
+
             // Escuchar cambios en la Base de Datos
             useEffect(() => {
                 if (!isSystemReady || !user) return;
