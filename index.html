@@ -30,6 +30,7 @@
             scroll-behavior: smooth;
         }
 
+        /* Estética del Scroll */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; border: 2px solid #0f172a; }
@@ -115,7 +116,6 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        /* 🔐 VARIABLE ADMIN_UID - REQUERIDA PARA ESCRIBIR EN BD */
         const ADMIN_UID = "6HmCH1dusWV0UGPU2gST4AUaCrJ2";
 
         const CAREERS = [
@@ -167,43 +167,54 @@
             const [isAutoPlaying, setIsAutoPlaying] = useState(true);
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [showPassModal, setShowPassModal] = useState(false);
-            const [showFAQ, setShowFAQ] = useState(false);
-            
-            // Estados para Login
             const [userInput, setUserInput] = useState('');
             const [passwordInput, setPasswordInput] = useState('');
             const [isLoggingIn, setIsLoggingIn] = useState(false);
             const [passError, setPassError] = useState(false);
-
             const [schedules, setSchedules] = useState({});
             const [saveStatus, setSaveStatus] = useState('saved'); 
             const [isSystemReady, setIsSystemReady] = useState(false);
             const [isOffline, setIsOffline] = useState(true);
 
-            // Escuchador de sesión oficial
+            /* 🔥 CORRECCIÓN: AUTENTICACIÓN ANÓNIMA INMEDIATA PARA LECTURA */
             useEffect(() => {
+                const initPublicAuth = async () => {
+                    try {
+                        // Al entrar, intentamos un login anónimo para que Firebase nos reconozca
+                        const credential = await auth.signInAnonymously();
+                        setUser(credential.user);
+                    } catch (e) { 
+                        console.error("Auth Inicial Falló:", e); 
+                    }
+                };
+
+                // Escuchador de cambios de estado (cuando pases de Anónimo a Admin)
                 const unsubscribe = auth.onAuthStateChanged(u => {
-                    setUser(u);
-                    if (u && u.uid === ADMIN_UID) {
-                        setIsAdminMode(true);
+                    if (u) {
+                        setUser(u);
+                        setIsAdminMode(u.uid === ADMIN_UID);
+                        setIsOffline(false); // Estado Verde al detectar usuario
                     } else {
                         setIsAdminMode(false);
                     }
                     setIsSystemReady(true);
                 });
+
+                initPublicAuth();
                 return () => unsubscribe();
             }, []);
 
-            // Escuchar base de datos
+            /* 🔥 CORRECCIÓN: ESCUCHA DE DATOS SIEMPRE ACTIVA */
             useEffect(() => {
                 if (!isSystemReady) return;
+                
                 const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
                     setSchedules(prev => ({...prev, ...data}));
-                    setIsOffline(false);
+                    setIsOffline(false); // Conexión exitosa
                 }, (err) => { 
-                    console.error("Error Lectura DB:", err); 
+                    console.error("Permiso Denegado o Error DB:", err); 
                     setIsOffline(true); 
                 });
                 return () => unsubscribe();
@@ -212,68 +223,49 @@
             useEffect(() => {
                 const t = setInterval(() => setCurrentTime(new Date()), 1000);
                 const r = setInterval(() => {
-                    if (isAutoPlaying && !isAdminMode && !showPassModal && !showFAQ) {
+                    if (isAutoPlaying && !isAdminMode && !showPassModal) {
                         setCurrentCareerIdx(p => (p + 1) % CAREERS.length);
                     }
                 }, 15000);
                 return () => { clearInterval(t); clearInterval(r); };
-            }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
+            }, [isAutoPlaying, isAdminMode, showPassModal]);
 
-            /* 🔥 LÓGICA DE LOGIN MANUAL FIREBASE */
             const handleManualLogin = async () => {
                 if (!userInput || !passwordInput) return;
                 setIsLoggingIn(true);
                 setPassError(false);
-
                 try {
                     const cred = await auth.signInWithEmailAndPassword(
                         userInput.trim().toLowerCase(),
                         passwordInput.trim().toLowerCase()
                     );
-
                     if (cred.user.uid === ADMIN_UID) {
                         setIsAdminMode(true);
                         setShowPassModal(false);
-                        setUserInput('');
-                        setPasswordInput('');
                     } else {
                         setPassError(true);
                         await auth.signOut();
                     }
                 } catch (error) {
-                    console.error("Error login:", error.message);
                     setPassError(true);
                 } finally {
                     setIsLoggingIn(false);
                 }
             };
 
-            /* 🔥 LÓGICA DE GRABACIÓN CORREGIDA */
             const persistToCloud = useCallback(async () => {
-                if (!isAdminMode || isOffline || !user) {
-                    console.error("No se puede guardar: No es Admin o Sistema Offline");
-                    return;
-                }
-
+                if (!isAdminMode || isOffline || !user) return;
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
                 const dataToSave = schedules[docId];
-
-                if (!dataToSave) {
-                    console.warn("No hay datos para guardar en este nivel.");
-                    setSaveStatus('saved');
-                    return;
-                }
-
+                if (!dataToSave) { setSaveStatus('saved'); return; }
                 try {
-                    // Grabación directa a la colección raíz 'schedules'
                     await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
-                    console.log("Grabación exitosa en:", docId);
-                } catch (e) {
-                    console.error("Error al grabar en la nube:", e);
-                    setSaveStatus('pending');
+                } catch (e) { 
+                    console.error(e); 
+                    setSaveStatus('pending'); 
                 }
             }, [isAdminMode, isOffline, user, currentCareerIdx, selectedYear, schedules]);
 
@@ -294,7 +286,7 @@
             const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando Servidor...</div>;
+            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Sincronizando...</div>;
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
@@ -314,16 +306,7 @@
                                 <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
-                                <button 
-                                    onClick={persistToCloud} 
-                                    className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${
-                                        saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
-                                        saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 
-                                        saveStatus === 'pending' ? 'text-yellow-500 border-yellow-500 animate-bounce' : 'text-red-500 border-red-500'
-                                    }`}
-                                >
-                                    <Icon name="Save" size={32} />
-                                </button>
+                                <button onClick={persistToCloud} className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 'text-yellow-500 border-yellow-500 animate-bounce'}`}><Icon name="Save" size={32} /></button>
                             )}
                         </div>
                     </header>
@@ -331,7 +314,7 @@
                     <div className={`${career.color} py-3 md:py-5 px-4 md:px-8 flex justify-between items-center shadow-2xl sticky top-0 z-10 transition-colors duration-1000`}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 md:p-3 text-white"><Icon name="ChevronLeft" size={32} /></button>
                         <div className="text-center font-black flex-1">
-                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl">{career.name}</h2>
+                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl leading-none">{career.name}</h2>
                             <div className="flex items-center justify-center gap-2 md:gap-4 mt-1 md:mt-2 opacity-90 uppercase text-[7px] md:text-[10px] tracking-widest font-black">
                                 <Icon name="GraduationCap" size={12} /> {selectedYear}{selectedYear === "1" || selectedYear === "3" ? "ER" : selectedYear === "2" ? "DO" : "TO"} AÑO ACADÉMICO • CARRERA {currentCareerIdx+1}/8
                             </div>
@@ -367,7 +350,7 @@
                                                         <input type="text" placeholder="Aula" className="input-admin w-24 text-center text-blue-400 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
                                                     </div>
                                                 ) : (
-                                                    <div className="flex-1 ml-4 overflow-hidden font-black">
+                                                    <div className="flex-1 ml-4 overflow-hidden font-black text-left">
                                                         <div className="text-lg md:text-3xl uppercase truncate">{slot.subject || "BLOQUE LIBRE"}</div>
                                                         {slot.subject && <div className="text-blue-400 uppercase text-[10px] md:text-lg italic">SALA {slot.room}</div>}
                                                     </div>
@@ -393,7 +376,7 @@
                                                         <div key={day + hIdx} className={`p-2 rounded-xl min-h-[45px] flex flex-col border ${slot.subject ? 'bg-slate-800 border-slate-600 shadow-2xl' : 'bg-slate-800/10 opacity-20'}`}>
                                                             <div className="text-[7px] md:text-[9px] font-mono text-slate-50 border-b border-slate-700 pb-1 mb-1 italic uppercase font-black">CLAVE {hIdx+1}</div>
                                                             {isAdminMode ? <div className="flex flex-col gap-1 h-full"><textarea className="input-admin-sm text-[9px] font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} /><input className="input-admin-sm text-center text-blue-400 py-0.5 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} /></div>
-                                                            : <Fragment><div className="text-[10px] md:text-[13px] font-black leading-tight text-white/90 truncate uppercase">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-blue-400 font-black mt-auto italic">SALA {slot.room}</div>}</Fragment>}
+                                                            : <Fragment><div className="text-[10px] md:text-[13px] font-black leading-tight text-white/90 truncate uppercase text-left">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-blue-400 font-black mt-auto italic text-left">SALA {slot.room}</div>}</Fragment>}
                                                         </div>
                                                     );
                                                 })}
@@ -417,7 +400,7 @@
                         <div className="flex items-center gap-4 bg-slate-900/50 px-4 md:px-8 py-2 md:py-3 rounded-full border border-slate-700 shadow-inner ml-auto md:ml-0">
                             <div className={`flex items-center gap-2 ${isOffline ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
                                 <Icon name={isOffline ? "WifiOff" : "Wifi"} size={18} />
-                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 'CAMBIOS PENDIENTES'}</span>
+                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : 'SISTEMA SINCRONIZADO'}</span>
                             </div>
                             <div className="h-4 w-px bg-slate-700"></div>
                             <div className="flex items-center gap-2 text-slate-500 font-black italic uppercase"><Icon name="Monitor" size={18}/><span className="font-black text-[9px] md:text-[11px]">FINCA 2026</span></div>
@@ -430,14 +413,11 @@
                                 <div className="mb-6 text-blue-500 flex justify-center"><Icon name="Lock" size={40} /></div>
                                 <h3 className="text-lg md:text-xl font-black uppercase text-center mb-2">Acceso Administrador</h3>
                                 <p className="text-slate-400 text-[10px] text-center mb-8 px-2 leading-tight">Ingrese su correo institucional y contraseña en minúsculas para editar contenidos.</p>
-                                
                                 <div className="space-y-4 mb-8">
                                     <input type="email" placeholder="usuario@uvm.cl" className="login-input lowercase" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
                                     <input type="password" placeholder="••••••••" className="login-input lowercase" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
                                 </div>
-
                                 {passError && <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">❌ Acceso denegado</p>}
-
                                 <div className="flex gap-4">
                                     <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="flex-1 bg-slate-700 py-4 rounded-xl font-black text-white uppercase text-[10px]">Cancelar</button>
                                     <button onClick={handleManualLogin} disabled={isLoggingIn} className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] shadow-xl shadow-blue-500/20 disabled:opacity-50">{isLoggingIn ? 'Entrando...' : 'Acceder'}</button>
