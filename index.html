@@ -30,7 +30,6 @@
             scroll-behavior: smooth;
         }
 
-        /* Estética del Scroll */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; border: 2px solid #0f172a; }
@@ -65,7 +64,6 @@
             min-height: 35px;
         }
 
-        /* Campos de Login Manual */
         .login-input {
             background: rgba(15, 23, 42, 0.9);
             border: 2px solid #334155;
@@ -96,7 +94,6 @@
         }
         
         .subject-text { word-break: break-word; overflow-wrap: break-word; line-height: 1.3; }
-        .faq-card { background: rgba(30, 41, 59, 0.5); border-left: 4px solid #3b82f6; transition: all 0.3s ease; }
     </style>
 </head>
 <body>
@@ -118,7 +115,7 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        /* 🔐 VARIABLE ADMIN_UID REQUERIDA */
+        /* 🔐 VARIABLE ADMIN_UID - REQUERIDA PARA ESCRIBIR EN BD */
         const ADMIN_UID = "6HmCH1dusWV0UGPU2gST4AUaCrJ2";
 
         const CAREERS = [
@@ -172,7 +169,7 @@
             const [showPassModal, setShowPassModal] = useState(false);
             const [showFAQ, setShowFAQ] = useState(false);
             
-            // Estados para Login Manual
+            // Estados para Login
             const [userInput, setUserInput] = useState('');
             const [passwordInput, setPasswordInput] = useState('');
             const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -183,7 +180,7 @@
             const [isSystemReady, setIsSystemReady] = useState(false);
             const [isOffline, setIsOffline] = useState(true);
 
-            /* 🔥 MONITOR DE AUTENTICACIÓN REAL */
+            // Escuchador de sesión oficial
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged(u => {
                     setUser(u);
@@ -197,7 +194,7 @@
                 return () => unsubscribe();
             }, []);
 
-            // Escuchar cambios en la Base de Datos
+            // Escuchar base de datos
             useEffect(() => {
                 if (!isSystemReady) return;
                 const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
@@ -205,7 +202,10 @@
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
                     setSchedules(prev => ({...prev, ...data}));
                     setIsOffline(false);
-                }, (err) => { console.error(err); setIsOffline(true); });
+                }, (err) => { 
+                    console.error("Error Lectura DB:", err); 
+                    setIsOffline(true); 
+                });
                 return () => unsubscribe();
             }, [isSystemReady]);
 
@@ -219,21 +219,18 @@
                 return () => { clearInterval(t); clearInterval(r); };
             }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
 
-            /* 🔥 NUEVA LÓGICA DE LOGIN MANUAL FIREBASE */
+            /* 🔥 LÓGICA DE LOGIN MANUAL FIREBASE */
             const handleManualLogin = async () => {
                 if (!userInput || !passwordInput) return;
-
                 setIsLoggingIn(true);
                 setPassError(false);
 
                 try {
-                    // Intento de login oficial con Firebase Auth
                     const cred = await auth.signInWithEmailAndPassword(
                         userInput.trim().toLowerCase(),
                         passwordInput.trim().toLowerCase()
                     );
 
-                    // Verificación estricta de UID administrador
                     if (cred.user.uid === ADMIN_UID) {
                         setIsAdminMode(true);
                         setShowPassModal(false);
@@ -243,7 +240,6 @@
                         setPassError(true);
                         await auth.signOut();
                     }
-
                 } catch (error) {
                     console.error("Error login:", error.message);
                     setPassError(true);
@@ -252,18 +248,34 @@
                 }
             };
 
-            const persistToCloud = useCallback(async (forcedData = null) => {
-                if (!isAdminMode || isOffline) return;
+            /* 🔥 LÓGICA DE GRABACIÓN CORREGIDA */
+            const persistToCloud = useCallback(async () => {
+                if (!isAdminMode || isOffline || !user) {
+                    console.error("No se puede guardar: No es Admin o Sistema Offline");
+                    return;
+                }
+
                 setSaveStatus('saving');
                 const careerId = CAREERS[currentCareerIdx].id;
                 const docId = `${careerId}-${selectedYear}`;
-                const dataToSave = forcedData || schedules[docId];
-                if (!dataToSave) { setSaveStatus('saved'); return; }
+                const dataToSave = schedules[docId];
+
+                if (!dataToSave) {
+                    console.warn("No hay datos para guardar en este nivel.");
+                    setSaveStatus('saved');
+                    return;
+                }
+
                 try {
+                    // Grabación directa a la colección raíz 'schedules'
                     await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
                     setSaveStatus('saved');
-                } catch (e) { console.error(e); setSaveStatus('pending'); }
-            }, [isAdminMode, isOffline, currentCareerIdx, selectedYear, schedules]);
+                    console.log("Grabación exitosa en:", docId);
+                } catch (e) {
+                    console.error("Error al grabar en la nube:", e);
+                    setSaveStatus('pending');
+                }
+            }, [isAdminMode, isOffline, user, currentCareerIdx, selectedYear, schedules]);
 
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
                 if (!isAdminMode) return;
@@ -282,12 +294,10 @@
             const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Autenticando...</div>;
+            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando Servidor...</div>;
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
-                    <button onClick={() => setShowFAQ(true)} className="fixed bottom-24 right-4 md:right-8 z-[60] bg-blue-600 text-white p-4 md:p-5 rounded-full shadow-2xl animate-bounce"><Icon name="HelpCircle" size={32} /></button>
-
                     <header className="bg-slate-800 border-b border-slate-700 px-4 md:px-8 py-3 md:py-5 flex flex-wrap justify-between items-center shadow-xl z-20 shrink-0">
                         <div className="flex items-center gap-3 md:gap-6">
                             <div className="bg-white p-1 rounded-xl shadow-lg w-16 h-16 md:w-28 md:h-28 flex items-center justify-center overflow-hidden shrink-0">
@@ -304,7 +314,16 @@
                                 <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
-                                <button onClick={() => persistToCloud()} disabled={isOffline || saveStatus === 'saving'} className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 ${isOffline ? 'text-gray-600' : saveStatus === 'saved' ? 'text-green-500 border-green-500/20' : 'text-yellow-500 border-yellow-500 animate-bounce'}`}><Icon name={isOffline ? "WifiOff" : "Save"} size={32} /></button>
+                                <button 
+                                    onClick={persistToCloud} 
+                                    className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${
+                                        saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
+                                        saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 
+                                        saveStatus === 'pending' ? 'text-yellow-500 border-yellow-500 animate-bounce' : 'text-red-500 border-red-500'
+                                    }`}
+                                >
+                                    <Icon name="Save" size={32} />
+                                </button>
                             )}
                         </div>
                     </header>
@@ -312,7 +331,7 @@
                     <div className={`${career.color} py-3 md:py-5 px-4 md:px-8 flex justify-between items-center shadow-2xl sticky top-0 z-10 transition-colors duration-1000`}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 md:p-3 text-white"><Icon name="ChevronLeft" size={32} /></button>
                         <div className="text-center font-black flex-1">
-                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl leading-none">{career.name}</h2>
+                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl">{career.name}</h2>
                             <div className="flex items-center justify-center gap-2 md:gap-4 mt-1 md:mt-2 opacity-90 uppercase text-[7px] md:text-[10px] tracking-widest font-black">
                                 <Icon name="GraduationCap" size={12} /> {selectedYear}{selectedYear === "1" || selectedYear === "3" ? "ER" : selectedYear === "2" ? "DO" : "TO"} AÑO ACADÉMICO • CARRERA {currentCareerIdx+1}/8
                             </div>
@@ -334,12 +353,12 @@
                         <div className="w-full mb-10 max-w-[1400px] mx-auto">
                             {viewMode === 'daily' ? (
                                 <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
-                                    <h3 className="text-center text-blue-400 font-black uppercase text-xl md:text-2xl italic">Programación de {currentDayName}</h3>
+                                    <h3 className="text-center text-blue-400 font-black uppercase text-xl md:text-2xl italic font-black">Programación de {currentDayName}</h3>
                                     {HOURS.map((h, i) => {
                                         const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                         return (
                                             <div key={i} className={`flex items-center p-4 md:p-7 rounded-2xl bg-slate-800 border-l-[10px] ${slot.subject ? 'border-blue-500 shadow-lg' : 'opacity-20 border-dashed border-slate-700'}`}>
-                                                <div className="w-24 md:w-48 text-xs md:text-lg font-mono font-bold text-slate-200 shrink-0">
+                                                <div className="w-24 md:w-48 text-xs md:text-lg font-mono font-bold text-slate-200 shrink-0 leading-none">
                                                     <span className="text-[8px] md:text-[10px] text-slate-50 block font-black uppercase">CLAVE {i+1}</span>{h}
                                                 </div>
                                                 {isAdminMode ? (
@@ -365,8 +384,8 @@
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
                                                 <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-50 opacity-100">
-                                                    <span className="font-black text-slate-50">C{hIdx + 1}</span>
-                                                    <span className="mt-1 text-[7px] md:text-[9px] text-slate-100">{h.split(' - ')[0]}</span>
+                                                    <span className="font-black">C{hIdx + 1}</span>
+                                                    <span className="mt-1 text-[7px] md:text-[9px] text-white/50">{h.split(' - ')[0]}</span>
                                                 </div>
                                                 {DAYS.map(day => {
                                                     const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
@@ -405,21 +424,6 @@
                         </div>
                     </footer>
 
-                    {showFAQ && (
-                        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-[100] p-4">
-                            <div className="bg-slate-900 border-2 border-slate-700 p-6 md:p-12 rounded-3xl max-w-3xl w-full relative max-h-[85vh] overflow-y-auto">
-                                <button onClick={() => setShowFAQ(false)} className="absolute top-6 right-6 text-slate-500"><Icon name="X" size={32}/></button>
-                                <div className="mb-6 text-blue-500 flex justify-center"><Icon name="HelpCircle" size={60} /></div>
-                                <h3 className="text-2xl md:text-4xl font-black uppercase text-center mb-6">Ayuda y FAQ</h3>
-                                <div className="space-y-4">
-                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Qué son las Claves?</h4><p className="text-slate-300 text-xs">Bloques horarios de 45 min. Hay 15 claves diarias cubriendo de 08:20 a 20:45 hrs.</p></div>
-                                    <div className="faq-card p-4 rounded-xl"><h4 className="text-blue-400 font-black text-sm uppercase">¿Cómo editar los horarios?</h4><p className="text-slate-300 text-xs">Entre al Modo Admin con sus credenciales institucionales. Guarde cambios pulsando el icono del disquete.</p></div>
-                                </div>
-                                <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-slate-700 py-4 px-8 rounded-2xl font-black text-white uppercase text-xs">Cerrar Ayuda</button></div>
-                            </div>
-                        </div>
-                    )}
-
                     {showPassModal && (
                         <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
                             <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl">
@@ -428,50 +432,15 @@
                                 <p className="text-slate-400 text-[10px] text-center mb-8 px-2 leading-tight">Ingrese su correo institucional y contraseña en minúsculas para editar contenidos.</p>
                                 
                                 <div className="space-y-4 mb-8">
-                                    <div>
-                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">usuario (correo)</label>
-                                        <input 
-                                            type="email" 
-                                            placeholder="correo@uvm.cl" 
-                                            className="login-input lowercase"
-                                            value={userInput} 
-                                            onChange={e => setUserInput(e.target.value)} 
-                                            onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[9px] text-slate-500 uppercase font-black mb-1.5 block tracking-widest">contraseña institucional</label>
-                                        <input 
-                                            type="password" 
-                                            placeholder="••••••••" 
-                                            className="login-input lowercase"
-                                            value={passwordInput} 
-                                            onChange={e => setPasswordInput(e.target.value)} 
-                                            onKeyDown={e => e.key === 'Enter' && handleManualLogin()}
-                                        />
-                                    </div>
+                                    <input type="email" placeholder="usuario@uvm.cl" className="login-input lowercase" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
+                                    <input type="password" placeholder="••••••••" className="login-input lowercase" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
                                 </div>
 
-                                {passError && (
-                                    <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">
-                                        ❌ Acceso denegado: Datos incorrectos
-                                    </p>
-                                )}
+                                {passError && <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">❌ Acceso denegado</p>}
 
                                 <div className="flex gap-4">
-                                    <button 
-                                        onClick={() => {setShowPassModal(false); setUserInput(''); setPasswordInput(''); setPassError(false);}} 
-                                        className="flex-1 bg-slate-700 py-4 rounded-xl font-black text-white uppercase text-[10px] tracking-widest hover:bg-slate-600 transition-all"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button 
-                                        onClick={handleManualLogin}
-                                        disabled={isLoggingIn}
-                                        className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
-                                    >
-                                        {isLoggingIn ? 'Entrando...' : 'Acceder'}
-                                    </button>
+                                    <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="flex-1 bg-slate-700 py-4 rounded-xl font-black text-white uppercase text-[10px]">Cancelar</button>
+                                    <button onClick={handleManualLogin} disabled={isLoggingIn} className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] shadow-xl shadow-blue-500/20 disabled:opacity-50">{isLoggingIn ? 'Entrando...' : 'Acceder'}</button>
                                 </div>
                             </div>
                         </div>
