@@ -167,54 +167,47 @@
             const [isAutoPlaying, setIsAutoPlaying] = useState(true);
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [showPassModal, setShowPassModal] = useState(false);
+            
             const [userInput, setUserInput] = useState('');
             const [passwordInput, setPasswordInput] = useState('');
             const [isLoggingIn, setIsLoggingIn] = useState(false);
             const [passError, setPassError] = useState(false);
+
             const [schedules, setSchedules] = useState({});
             const [saveStatus, setSaveStatus] = useState('saved'); 
             const [isSystemReady, setIsSystemReady] = useState(false);
             const [isOffline, setIsOffline] = useState(true);
 
-            /* 🔥 CORRECCIÓN: AUTENTICACIÓN ANÓNIMA INMEDIATA PARA LECTURA */
-            useEffect(() => {
-                const initPublicAuth = async () => {
-                    try {
-                        // Al entrar, intentamos un login anónimo para que Firebase nos reconozca
-                        const credential = await auth.signInAnonymously();
-                        setUser(credential.user);
-                    } catch (e) { 
-                        console.error("Auth Inicial Falló:", e); 
-                    }
-                };
+            // 🔥 NUEVO: Seguimiento de documentos modificados
+            const [modifiedKeys, setModifiedKeys] = useState(new Set());
 
-                // Escuchador de cambios de estado (cuando pases de Anónimo a Admin)
+            useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged(u => {
-                    if (u) {
-                        setUser(u);
-                        setIsAdminMode(u.uid === ADMIN_UID);
-                        setIsOffline(false); // Estado Verde al detectar usuario
+                    setUser(u);
+                    if (u && u.uid === ADMIN_UID) {
+                        setIsAdminMode(true);
                     } else {
                         setIsAdminMode(false);
                     }
                     setIsSystemReady(true);
                 });
-
-                initPublicAuth();
+                auth.signInAnonymously().catch(() => {});
                 return () => unsubscribe();
             }, []);
 
-            /* 🔥 CORRECCIÓN: ESCUCHA DE DATOS SIEMPRE ACTIVA */
             useEffect(() => {
                 if (!isSystemReady) return;
-                
                 const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
                     const data = {};
                     snap.forEach(doc => data[doc.id] = doc.data().slots);
-                    setSchedules(prev => ({...prev, ...data}));
-                    setIsOffline(false); // Conexión exitosa
+                    // Actualizamos solo los que NO hemos modificado localmente para no pisar ediciones en curso
+                    setSchedules(prev => {
+                        const next = { ...prev, ...data };
+                        return next;
+                    });
+                    setIsOffline(false);
                 }, (err) => { 
-                    console.error("Permiso Denegado o Error DB:", err); 
+                    console.error("Error Lectura DB:", err); 
                     setIsOffline(true); 
                 });
                 return () => unsubscribe();
@@ -253,26 +246,48 @@
                 }
             };
 
+            /* 🔥 LÓGICA DE GRABACIÓN MULTI-CARRERA (ACUMULATIVA) */
             const persistToCloud = useCallback(async () => {
-                if (!isAdminMode || isOffline || !user) return;
-                setSaveStatus('saving');
-                const careerId = CAREERS[currentCareerIdx].id;
-                const docId = `${careerId}-${selectedYear}`;
-                const dataToSave = schedules[docId];
-                if (!dataToSave) { setSaveStatus('saved'); return; }
-                try {
-                    await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
-                    setSaveStatus('saved');
-                } catch (e) { 
-                    console.error(e); 
-                    setSaveStatus('pending'); 
+                if (!isAdminMode || isOffline || !user || modifiedKeys.size === 0) {
+                    console.log("Nada modificado o permisos insuficientes");
+                    return;
                 }
-            }, [isAdminMode, isOffline, user, currentCareerIdx, selectedYear, schedules]);
+
+                setSaveStatus('saving');
+                
+                try {
+                    // Creamos promesas para cada documento que fue modificado
+                    const savePromises = Array.from(modifiedKeys).map(async (docId) => {
+                        const dataToSave = schedules[docId];
+                        if (dataToSave) {
+                            await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
+                        }
+                    });
+
+                    await Promise.all(savePromises);
+                    
+                    setSaveStatus('saved');
+                    setModifiedKeys(new Set()); // Limpiamos la lista de cambios pendientes tras éxito
+                    console.log("Todos los cambios guardados correctamente");
+                } catch (e) {
+                    console.error("Error al grabar multi-doc:", e);
+                    setSaveStatus('pending');
+                }
+            }, [isAdminMode, isOffline, user, schedules, modifiedKeys]);
 
             const handleUpdate = (careerId, year, day, hIdx, field, value) => {
                 if (!isAdminMode) return;
                 const docId = `${careerId}-${year}`;
+                
                 setSaveStatus('pending');
+                
+                // Marcamos este ID como modificado
+                setModifiedKeys(prev => {
+                    const next = new Set(prev);
+                    next.add(docId);
+                    return next;
+                });
+
                 setSchedules(prev => {
                     const next = JSON.parse(JSON.stringify(prev));
                     if (!next[docId]) next[docId] = {};
@@ -286,7 +301,7 @@
             const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
             const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Sincronizando...</div>;
+            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando...</div>;
 
             return (
                 <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
@@ -302,11 +317,23 @@
                         </div>
                         <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
                             <div className="text-right">
-                                <div className="text-xl md:text-3xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                <div className="text-xl md:text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                 <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
-                                <button onClick={persistToCloud} className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 'text-yellow-500 border-yellow-500 animate-bounce'}`}><Icon name="Save" size={32} /></button>
+                                <button 
+                                    onClick={persistToCloud} 
+                                    className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${
+                                        modifiedKeys.size > 0 ? 'text-yellow-500 border-yellow-500 animate-bounce' : 
+                                        saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
+                                        saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 
+                                        'text-red-500 border-red-500'
+                                    }`}
+                                    title={modifiedKeys.size > 0 ? `Tienes cambios en ${modifiedKeys.size} carrera(s)` : "Todo al día"}
+                                >
+                                    <Icon name="Save" size={32} />
+                                    {modifiedKeys.size > 0 && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded-full">{modifiedKeys.size}</span>}
+                                </button>
                             )}
                         </div>
                     </header>
@@ -325,7 +352,7 @@
                     <main className="flex-1 p-4 md:p-10 flex flex-col gap-6">
                         <div className="flex flex-col items-center gap-4">
                             <div className="flex flex-wrap justify-center gap-1 md:gap-2 bg-slate-800 p-1.5 md:p-2.5 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl">
-                                {YEARS.map(y => <button key={y} onClick={() => setSelectedYear(y)} className={`px-4 md:px-10 py-2 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-black uppercase ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-50'}`}>{y}er año</button>)}
+                                {YEARS.map(y => <button key={y} onClick={() => { setSelectedYear(y); setIsAutoPlaying(false); }} className={`px-4 md:px-10 py-2 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-black uppercase ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-50'}`}>{y}er año</button>)}
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => setViewMode('daily')} className={`px-6 md:px-12 py-2 md:py-4 rounded-xl border-2 font-black text-xs ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>DIARIO</button>
@@ -400,7 +427,7 @@
                         <div className="flex items-center gap-4 bg-slate-900/50 px-4 md:px-8 py-2 md:py-3 rounded-full border border-slate-700 shadow-inner ml-auto md:ml-0">
                             <div className={`flex items-center gap-2 ${isOffline ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
                                 <Icon name={isOffline ? "WifiOff" : "Wifi"} size={18} />
-                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : 'SISTEMA SINCRONIZADO'}</span>
+                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 'CAMBIOS PENDIENTES'}</span>
                             </div>
                             <div className="h-4 w-px bg-slate-700"></div>
                             <div className="flex items-center gap-2 text-slate-500 font-black italic uppercase"><Icon name="Monitor" size={18}/><span className="font-black text-[9px] md:text-[11px]">FINCA 2026</span></div>
