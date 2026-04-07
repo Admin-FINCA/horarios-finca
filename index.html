@@ -3,455 +3,441 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Horario Facultad de Ingeniería - UVM</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React y Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>UVM Labs - Gestión de Horarios</title>
     
-    <!-- Firebase SDK (Compat) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Scripts Base -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
         
-        html, body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: #0f172a; 
-            margin: 0; 
-            color: white;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto !important; 
-            scroll-behavior: smooth;
+        :root {
+            /* Nueva Paleta Pastel Semántica */
+            --brand: #B2F2BB;   /* Mint Pastel (Header) */
+            --muted: #D6BCFA;   /* Lavanda (Botones/Secundario) */
+            --bg: #F7FAFC;      /* Gris Muy Claro (Fondo) */
+            --text: #1A202C;    /* Negro Oscuro (Texto) */
+            --accent: #805AD5;  /* Morado (Acentos/Highlights) */
+            --border: #E2E8F0;
+            --card-bg: #FFFFFF;
         }
 
-        /* Estética del Scroll */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; border: 2px solid #0f172a; }
-
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+        }
         
-        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
-
-        .input-admin {
-            background: rgba(15, 23, 42, 0.95);
-            border: 2px solid #475569;
-            border-radius: 0.75rem;
-            padding: 0.75rem;
-            color: white;
+        /* Scrollbar oculta */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .date-picker-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .native-date-input {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            outline: none;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 40;
+        }
+
+        /* Tarjeta de edición con acento morado */
+        .edit-card {
+            background-color: var(--card-bg);
+            border: 2px solid var(--accent);
+            box-shadow: 0 15px 30px -10px rgba(128, 90, 213, 0.3);
+        }
+        .edit-input {
+            background-color: #F8FAFC;
+            border: 1px solid var(--border);
+            color: var(--text);
             transition: all 0.2s;
         }
-        .input-admin:focus { border-color: #3b82f6; background: #1e293b; }
-
-        .input-admin-sm {
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid #475569;
-            border-radius: 0.4rem;
-            padding: 0.3rem;
-            color: white;
-            width: 100%;
-            font-size: 11px;
+        .edit-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(128, 90, 213, 0.1);
             outline: none;
-            min-height: 35px;
         }
 
-        .login-input {
-            background: rgba(15, 23, 42, 0.9);
-            border: 2px solid #334155;
-            border-radius: 0.75rem;
-            padding: 0.75rem 1rem;
-            color: white;
-            width: 100%;
-            font-weight: 600;
-            outline: none;
-            transition: all 0.2s;
-            text-align: center;
-        }
-        .login-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+        /* Tabla fluida */
+        .table-fixed { table-layout: fixed; min-width: 850px; }
 
-        .weekly-grid {
-            display: grid;
-            grid-template-columns: 60px repeat(6, 1fr);
-            gap: 6px;
-            min-width: 900px; 
+        /* Estilo de los bloques de horario */
+        .slot-card {
+            background-color: #64748b; /* Color base para slots ocupados */
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-
-        @media (min-width: 768px) {
-            .weekly-grid {
-                grid-template-columns: 80px repeat(6, 1fr);
-                gap: 10px;
-                min-width: 1200px;
-            }
+        .slot-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px -5px rgba(0,0,0,0.1);
         }
-        
-        .subject-text { word-break: break-word; overflow-wrap: break-word; line-height: 1.3; }
     </style>
 </head>
-<body>
+<body class="no-scrollbar">
     <div id="root"></div>
 
+    <!-- Script de Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+
+        window.FB_LIB = { 
+            initializeApp, getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc, 
+            getAuth, signInAnonymously, onAuthStateChanged 
+        };
+    </script>
+
     <script type="text/babel">
-        const { useState, useEffect, Fragment, useRef, useCallback } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCjXzraYD1gVajJgLedKTQ4SusoLM5fzLM",
-            authDomain: "horarios-uvm.firebaseapp.com",
-            projectId: "horarios-uvm",
-            storageBucket: "horarios-uvm.firebasestorage.app",
-            messagingSenderId: "378691379033",
-            appId: "1:378691379033:web:ac841cf0d1d2446a7af648"
+        const Icons = {
+            Database: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>,
+            Calendar: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+            Lock: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            Unlock: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V5a5 5 0 0 1 9.9-1"/></svg>,
+            ChevronLeft: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>,
+            ChevronRight: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>,
+            Trash: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
+            Clock: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            Save: (props) => <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         };
 
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        const ADMIN_UID = "6HmCH1dusWV0UGPU2gST4AUaCrJ2";
-
-        const CAREERS = [
-            { id: "industrial", name: "Ingeniería Civil Industrial", color: "bg-blue-600" },
-            { id: "informatica", name: "Ingeniería Civil Informática", color: "bg-green-600" },
-            { id: "comercial", name: "Ingeniería Comercial", color: "bg-orange-600" },
-            { id: "construccion", name: "Ingeniería en Construcción", color: "bg-red-600" },
-            { id: "prevencion", name: "Ingeniería en Prevención de Riesgos", color: "bg-gray-700" },
-            { id: "agronomia", name: "Agronomía", color: "bg-emerald-600" },
-            { id: "contador", name: "Contador Auditor", color: "bg-purple-600" },
-            { id: "minas", name: "Ingeniería Civil de Minas", color: "bg-slate-600" },
+        const LABS = [
+            { id: 'minas', name: 'Lab. Minas', color: 'bg-slate-500', icon: '⛏️' },
+            { id: 'construccion', name: 'Lab. Construcción', color: 'bg-slate-500', icon: '🏗️' },
+            { id: 'robotica', name: 'Lab. Robótica', color: 'bg-slate-500', icon: '🤖' },
+            { id: 'agronomia', name: 'Lab. Agronomía', color: 'bg-slate-500', icon: '🌱' },
+            { id: 'cava', name: 'Cava', color: 'bg-slate-500', icon: '🍷' }
         ];
 
-        const YEARS = ["1", "2", "3", "4", "5"];
-        const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-        const HOURS = [
-            "08:20 - 09:05", "09:05 - 09:50", "10:00 - 10:45", "10:45 - 11:30",
-            "11:40 - 12:25", "12:25 - 13:10", "13:20 - 14:05", "14:05 - 14:50",
-            "15:00 - 15:45", "15:45 - 16:30", "16:40 - 17:25", "17:25 - 18:10",
-            "18:20 - 19:05", "19:05 - 19:50", "20:00 - 20:45"
-        ];
-
-        const Icon = ({ name, size = 24, className = "" }) => {
-            const icons = {
-                Clock: <path d="M12 6v6l4 2" />,
-                Calendar: <Fragment><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Fragment>,
-                ChevronRight: <path d="m9 18 6-6-6-6" />,
-                ChevronLeft: <path d="m15 18-6-6 6-6" />,
-                Pause: <Fragment><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></Fragment>,
-                Play: <path d="m5 3 14 9-14 9V3z" />,
-                Lock: <Fragment><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Fragment>,
-                GraduationCap: <Fragment><path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" /></Fragment>,
-                Monitor: <Fragment><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></Fragment>,
-                Save: <Fragment><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></Fragment>,
-                Wifi: <Fragment><path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Fragment>,
-                WifiOff: <Fragment><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.58 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Fragment>,
-                HelpCircle: <Fragment><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></Fragment>,
-                X: <Fragment><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Fragment>
-            };
-            return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name]}</svg>;
-        };
+        const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const BLOQUES = Array.from({ length: 14 }, (_, i) => `${8 + i}:00`);
 
         const App = () => {
-            const [user, setUser] = useState(null);
-            const [currentCareerIdx, setCurrentCareerIdx] = useState(0);
-            const [selectedYear, setSelectedYear] = useState("1");
-            const [viewMode, setViewMode] = useState('daily');
-            const [currentTime, setCurrentTime] = useState(new Date());
-            const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-            const [isAdminMode, setIsAdminMode] = useState(false);
-            const [showPassModal, setShowPassModal] = useState(false);
-            
-            const [userInput, setUserInput] = useState('');
-            const [passwordInput, setPasswordInput] = useState('');
-            const [isLoggingIn, setIsLoggingIn] = useState(false);
-            const [passError, setPassError] = useState(false);
-
+            const [isOnline, setIsOnline] = useState(false);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [currentLab, setCurrentLab] = useState(LABS[0]);
+            const [selectedDate, setSelectedDate] = useState(new Date());
             const [schedules, setSchedules] = useState({});
-            const [saveStatus, setSaveStatus] = useState('saved'); 
-            const [isSystemReady, setIsSystemReady] = useState(false);
-            const [isOffline, setIsOffline] = useState(true);
+            const [loading, setLoading] = useState(true);
+            
+            const [editingSlot, setEditingSlot] = useState(null);
+            const [editValues, setEditValues] = useState({ asignatura: "", aula: "" });
 
-            // 🔥 NUEVO: Seguimiento de documentos modificados
-            const [modifiedKeys, setModifiedKeys] = useState(new Set());
-
-            useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged(u => {
-                    setUser(u);
-                    if (u && u.uid === ADMIN_UID) {
-                        setIsAdminMode(true);
-                    } else {
-                        setIsAdminMode(false);
-                    }
-                    setIsSystemReady(true);
-                });
-                auth.signInAnonymously().catch(() => {});
-                return () => unsubscribe();
+            const config = useMemo(() => {
+                if (typeof __firebase_config !== 'undefined') {
+                    try { return JSON.parse(__firebase_config); } catch (e) { return null; }
+                }
+                return null;
             }, []);
 
-            useEffect(() => {
-                if (!isSystemReady) return;
-                const unsubscribe = db.collection('schedules').onSnapshot((snap) => {
-                    const data = {};
-                    snap.forEach(doc => data[doc.id] = doc.data().slots);
-                    // Actualizamos solo los que NO hemos modificado localmente para no pisar ediciones en curso
-                    setSchedules(prev => {
-                        const next = { ...prev, ...data };
-                        return next;
-                    });
-                    setIsOffline(false);
-                }, (err) => { 
-                    console.error("Error Lectura DB:", err); 
-                    setIsOffline(true); 
-                });
-                return () => unsubscribe();
-            }, [isSystemReady]);
+            const getMonday = (d) => {
+                const date = new Date(d);
+                const day = date.getDay(), diff = date.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(date.setDate(diff));
+                monday.setHours(0,0,0,0);
+                return monday;
+            };
+
+            const mondayDate = useMemo(() => getMonday(selectedDate), [selectedDate]);
+
+            const formatDateForInput = (date) => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            };
 
             useEffect(() => {
-                const t = setInterval(() => setCurrentTime(new Date()), 1000);
-                const r = setInterval(() => {
-                    if (isAutoPlaying && !isAdminMode && !showPassModal) {
-                        setCurrentCareerIdx(p => (p + 1) % CAREERS.length);
+                const timer = setInterval(() => {
+                    if (window.FB_LIB || !config) {
+                        clearInterval(timer);
+                        initData();
                     }
-                }, 15000);
-                return () => { clearInterval(t); clearInterval(r); };
-            }, [isAutoPlaying, isAdminMode, showPassModal]);
+                }, 100);
+                return () => clearInterval(timer);
+            }, []);
 
-            const handleManualLogin = async () => {
-                if (!userInput || !passwordInput) return;
-                setIsLoggingIn(true);
-                setPassError(false);
-                try {
-                    const cred = await auth.signInWithEmailAndPassword(
-                        userInput.trim().toLowerCase(),
-                        passwordInput.trim().toLowerCase()
-                    );
-                    if (cred.user.uid === ADMIN_UID) {
-                        setIsAdminMode(true);
-                        setShowPassModal(false);
-                    } else {
-                        setPassError(true);
-                        await auth.signOut();
+            const initData = async () => {
+                if (config && window.FB_LIB) {
+                    setIsOnline(true);
+                    try {
+                        const app = window.FB_LIB.initializeApp(config);
+                        const db = window.FB_LIB.getFirestore(app);
+                        const auth = window.FB_LIB.getAuth(app);
+                        await window.FB_LIB.signInAnonymously(auth);
+                        
+                        const q = window.FB_LIB.query(window.FB_LIB.collection(db, 'artifacts', 'uvm-scheduler', 'public', 'data', 'schedules'));
+                        window.FB_LIB.onSnapshot(q, (snapshot) => {
+                            const data = {};
+                            snapshot.forEach(doc => data[doc.id] = doc.data());
+                            setSchedules(data);
+                            setLoading(false);
+                        });
+                    } catch (e) {
+                        setIsOnline(false);
+                        loadOffline();
                     }
-                } catch (error) {
-                    setPassError(true);
-                } finally {
-                    setIsLoggingIn(false);
+                } else {
+                    setIsOnline(false);
+                    loadOffline();
                 }
             };
 
-            /* 🔥 LÓGICA DE GRABACIÓN MULTI-CARRERA (ACUMULATIVA) */
-            const persistToCloud = useCallback(async () => {
-                if (!isAdminMode || isOffline || !user || modifiedKeys.size === 0) {
-                    console.log("Nada modificado o permisos insuficientes");
-                    return;
-                }
-
-                setSaveStatus('saving');
-                
-                try {
-                    // Creamos promesas para cada documento que fue modificado
-                    const savePromises = Array.from(modifiedKeys).map(async (docId) => {
-                        const dataToSave = schedules[docId];
-                        if (dataToSave) {
-                            await db.collection('schedules').doc(docId).set({ slots: dataToSave }, { merge: true });
-                        }
-                    });
-
-                    await Promise.all(savePromises);
-                    
-                    setSaveStatus('saved');
-                    setModifiedKeys(new Set()); // Limpiamos la lista de cambios pendientes tras éxito
-                    console.log("Todos los cambios guardados correctamente");
-                } catch (e) {
-                    console.error("Error al grabar multi-doc:", e);
-                    setSaveStatus('pending');
-                }
-            }, [isAdminMode, isOffline, user, schedules, modifiedKeys]);
-
-            const handleUpdate = (careerId, year, day, hIdx, field, value) => {
-                if (!isAdminMode) return;
-                const docId = `${careerId}-${year}`;
-                
-                setSaveStatus('pending');
-                
-                // Marcamos este ID como modificado
-                setModifiedKeys(prev => {
-                    const next = new Set(prev);
-                    next.add(docId);
-                    return next;
-                });
-
-                setSchedules(prev => {
-                    const next = JSON.parse(JSON.stringify(prev));
-                    if (!next[docId]) next[docId] = {};
-                    if (!next[docId][day]) next[docId][day] = HOURS.map(h => ({ hour: h, subject: '', room: '' }));
-                    next[docId][day][hIdx][field] = value;
-                    return next;
-                });
+            const loadOffline = () => {
+                const saved = localStorage.getItem('uvm_data');
+                if (saved) setSchedules(JSON.parse(saved));
+                setLoading(false);
             };
 
-            const career = CAREERS[currentCareerIdx];
-            const currentDayName = DAYS[Math.min(currentTime.getDay() - 1, 5)] || "Lunes";
-            const currentSchedule = schedules[`${career.id}-${selectedYear}`] || {};
+            const toggleAdmin = () => {
+                if (isAdmin) {
+                    setIsAdmin(false);
+                    setEditingSlot(null);
+                } else {
+                    const pass = prompt("Contraseña Administrativa:");
+                    if (pass === "adminUVM") setIsAdmin(true);
+                    else if (pass) alert("Clave incorrecta");
+                }
+            };
 
-            if (!isSystemReady) return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-black uppercase text-blue-400 animate-pulse">Iniciando...</div>;
+            const commitBooking = async (slotId, hora) => {
+                const isDeleting = editValues.asignatura.trim() === "" && editValues.aula.trim() === "";
+                let newData = { ...schedules };
+
+                if (isDeleting) {
+                    delete newData[slotId];
+                } else {
+                    newData[slotId] = { 
+                        asignatura: editValues.asignatura, 
+                        aula: editValues.aula,
+                        labId: currentLab.id, 
+                        time: hora 
+                    };
+                }
+
+                if (isOnline && window.FB_LIB) {
+                    try {
+                        const db = window.FB_LIB.getFirestore();
+                        const docRef = window.FB_LIB.doc(db, 'artifacts', 'uvm-scheduler', 'public', 'data', 'schedules', slotId);
+                        if (isDeleting) await window.FB_LIB.deleteDoc(docRef);
+                        else await window.FB_LIB.setDoc(docRef, newData[slotId]);
+                    } catch (e) {
+                        setSchedules(newData);
+                    }
+                } else {
+                    setSchedules(newData);
+                    localStorage.setItem('uvm_data', JSON.stringify(newData));
+                }
+                setEditingSlot(null);
+            };
+
+            if (loading) return (
+                <div className="h-screen flex items-center justify-center bg-[#F7FAFC]">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-12 h-12 border-4 border-[#805AD5] border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[#805AD5] font-bold uppercase text-xs tracking-widest">Sincronizando UVM</p>
+                    </div>
+                </div>
+            );
 
             return (
-                <div className="flex flex-col min-h-screen bg-slate-900 overflow-x-hidden relative">
-                    <header className="bg-slate-800 border-b border-slate-700 px-4 md:px-8 py-3 md:py-5 flex flex-wrap justify-between items-center shadow-xl z-20 shrink-0">
-                        <div className="flex items-center gap-3 md:gap-6">
-                            <div className="bg-white p-1 rounded-xl shadow-lg w-16 h-16 md:w-28 md:h-28 flex items-center justify-center overflow-hidden shrink-0">
-                                <img src="Logo_UVM.png" alt="Logo UVM" className="max-w-full max-h-full object-contain" onError={e => e.target.src='https://via.placeholder.com/150x150?text=UVM'} />
-                            </div>
-                            <div>
-                                <h1 className="text-sm md:text-xl lg:text-2xl font-black uppercase tracking-tight text-white leading-tight">Facultad de Ingeniería, Negocios <br className="hidden md:block"/> y Ciencias Agroambientales</h1>
-                                <p className="text-slate-400 text-[8px] md:text-xs font-bold uppercase tracking-[0.2em] mt-1 italic">Gestión Centralizada • UVM</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
-                            <div className="text-right">
-                                <div className="text-xl md:text-5xl font-mono font-bold text-blue-400 leading-none">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                <div className="text-[7px] md:text-[10px] text-slate-500 uppercase font-black mt-1 md:mt-2 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-                            </div>
-                            {isAdminMode && (
-                                <button 
-                                    onClick={persistToCloud} 
-                                    className={`p-3 md:p-5 rounded-xl md:rounded-2xl border-2 md:border-4 transition-all active:scale-90 ${
-                                        modifiedKeys.size > 0 ? 'text-yellow-500 border-yellow-500 animate-bounce' : 
-                                        saveStatus === 'saved' ? 'text-green-500 border-green-500/20 opacity-40' : 
-                                        saveStatus === 'saving' ? 'text-blue-500 border-blue-500 animate-spin-slow' : 
-                                        'text-red-500 border-red-500'
-                                    }`}
-                                    title={modifiedKeys.size > 0 ? `Tienes cambios en ${modifiedKeys.size} carrera(s)` : "Todo al día"}
-                                >
-                                    <Icon name="Save" size={32} />
-                                    {modifiedKeys.size > 0 && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded-full">{modifiedKeys.size}</span>}
-                                </button>
-                            )}
-                        </div>
-                    </header>
-
-                    <div className={`${career.color} py-3 md:py-5 px-4 md:px-8 flex justify-between items-center shadow-2xl sticky top-0 z-10 transition-colors duration-1000`}>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 md:p-3 text-white"><Icon name="ChevronLeft" size={32} /></button>
-                        <div className="text-center font-black flex-1">
-                            <h2 className="text-lg md:text-2xl lg:text-3xl uppercase tracking-tighter drop-shadow-2xl leading-none">{career.name}</h2>
-                            <div className="flex items-center justify-center gap-2 md:gap-4 mt-1 md:mt-2 opacity-90 uppercase text-[7px] md:text-[10px] tracking-widest font-black">
-                                <Icon name="GraduationCap" size={12} /> {selectedYear}{selectedYear === "1" || selectedYear === "3" ? "ER" : selectedYear === "2" ? "DO" : "TO"} AÑO ACADÉMICO • CARRERA {currentCareerIdx+1}/8
-                            </div>
-                        </div>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setIsAutoPlaying(false)}} className="p-2 md:p-3 text-white"><Icon name="ChevronRight" size={32} /></button>
-                    </div>
-
-                    <main className="flex-1 p-4 md:p-10 flex flex-col gap-6">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="flex flex-wrap justify-center gap-1 md:gap-2 bg-slate-800 p-1.5 md:p-2.5 rounded-2xl md:rounded-3xl border border-slate-700 shadow-2xl">
-                                {YEARS.map(y => <button key={y} onClick={() => { setSelectedYear(y); setIsAutoPlaying(false); }} className={`px-4 md:px-10 py-2 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-sm font-black uppercase ${selectedYear === y ? 'bg-blue-600 text-white' : 'text-slate-50'}`}>{y}er año</button>)}
-                            </div>
-                            <div className="flex gap-4">
-                                <button onClick={() => setViewMode('daily')} className={`px-6 md:px-12 py-2 md:py-4 rounded-xl border-2 font-black text-xs ${viewMode === 'daily' ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>DIARIO</button>
-                                <button onClick={() => setViewMode('weekly')} className={`px-6 md:px-12 py-2 md:py-4 rounded-xl border-2 font-black text-xs ${viewMode === 'weekly' ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>SEMANAL</button>
-                            </div>
-                        </div>
-
-                        <div className="w-full mb-10 max-w-[1400px] mx-auto">
-                            {viewMode === 'daily' ? (
-                                <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
-                                    <h3 className="text-center text-blue-400 font-black uppercase text-xl md:text-2xl italic font-black">Programación de {currentDayName}</h3>
-                                    {HOURS.map((h, i) => {
-                                        const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
-                                        return (
-                                            <div key={i} className={`flex items-center p-4 md:p-7 rounded-2xl bg-slate-800 border-l-[10px] ${slot.subject ? 'border-blue-500 shadow-lg' : 'opacity-20 border-dashed border-slate-700'}`}>
-                                                <div className="w-24 md:w-48 text-xs md:text-lg font-mono font-bold text-slate-200 shrink-0 leading-none">
-                                                    <span className="text-[8px] md:text-[10px] text-slate-50 block font-black uppercase">CLAVE {i+1}</span>{h}
-                                                </div>
-                                                {isAdminMode ? (
-                                                    <div className="flex-1 flex flex-col md:flex-row gap-2 ml-4">
-                                                        <textarea rows="1" placeholder="Materia..." className="input-admin text-sm" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
-                                                        <input type="text" placeholder="Aula" className="input-admin w-24 text-center text-blue-400 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex-1 ml-4 overflow-hidden font-black text-left">
-                                                        <div className="text-lg md:text-3xl uppercase truncate">{slot.subject || "BLOQUE LIBRE"}</div>
-                                                        {slot.subject && <div className="text-blue-400 uppercase text-[10px] md:text-lg italic">SALA {slot.room}</div>}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                <div className="min-h-screen pb-10">
+                    {/* NAV BAR - Mint Pastel */}
+                    <nav className="bg-[#B2F2BB] border-b border-[#A0D9AB] sticky top-0 z-50 px-4 md:px-6 py-4 shadow-sm">
+                        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="p-1">
+                                    <Icons.Database className="text-[#2D3748] w-7 h-7 md:w-8 md:h-8" />
                                 </div>
-                            ) : (
-                                <div className="overflow-x-auto custom-scrollbar">
-                                    <div className="weekly-grid">
-                                        <div className="h-10 md:h-16 flex items-center justify-center font-black text-slate-600 uppercase text-[8px] md:text-xs tracking-widest">Clave</div>
-                                        {DAYS.map(day => <div key={day} className={`p-2 md:p-5 rounded-xl text-center font-black text-[10px] md:text-sm uppercase ${day === currentDayName ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>{day}</div>)}
-                                        {HOURS.map((h, hIdx) => (
-                                            <Fragment key={hIdx}>
-                                                <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-50 opacity-100">
-                                                    <span className="font-black">C{hIdx + 1}</span>
-                                                    <span className="mt-1 text-[7px] md:text-[9px] text-white/50">{h.split(' - ')[0]}</span>
-                                                </div>
-                                                {DAYS.map(day => {
-                                                    const slot = (schedules[`${career.id}-${selectedYear}`]?.[day] || [])[hIdx] || { subject: '', room: '' };
-                                                    return (
-                                                        <div key={day + hIdx} className={`p-2 rounded-xl min-h-[45px] flex flex-col border ${slot.subject ? 'bg-slate-800 border-slate-600 shadow-2xl' : 'bg-slate-800/10 opacity-20'}`}>
-                                                            <div className="text-[7px] md:text-[9px] font-mono text-slate-50 border-b border-slate-700 pb-1 mb-1 italic uppercase font-black">CLAVE {hIdx+1}</div>
-                                                            {isAdminMode ? <div className="flex flex-col gap-1 h-full"><textarea className="input-admin-sm text-[9px] font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} /><input className="input-admin-sm text-center text-blue-400 py-0.5 font-bold" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} /></div>
-                                                            : <Fragment><div className="text-[10px] md:text-[13px] font-black leading-tight text-white/90 truncate uppercase text-left">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-blue-400 font-black mt-auto italic text-left">SALA {slot.room}</div>}</Fragment>}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </Fragment>
-                                        ))}
+                                <div>
+                                    <h1 className="font-extrabold text-lg md:text-xl text-[#1A202C] tracking-tight leading-none mb-1 uppercase">Laboratorios UVM</h1>
+                                    <p className="text-[9px] md:text-[10px] text-[#4A5568] font-bold uppercase tracking-[0.15em] leading-none">Ingeniería, Negocios y Agro</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-center">
+                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] md:text-[10px] font-bold uppercase bg-white/50 border-gray-300 text-gray-600`}>
+                                    <Icons.Clock className="w-3 h-3" />
+                                    {isOnline ? 'En Línea' : 'Local'}
+                                </div>
+                                <button 
+                                    onClick={toggleAdmin}
+                                    className={`flex items-center gap-2 px-4 md:px-5 py-2 rounded-xl text-xs md:text-sm font-bold transition-all ${isAdmin ? 'bg-[#805AD5] text-white shadow-md' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                    {isAdmin ? <Icons.Unlock className="w-4 h-4" /> : <Icons.Lock className="w-4 h-4" />}
+                                    <span className="">{isAdmin ? 'Admin On' : 'Acceso Admin'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
+                        {/* Selector de Labs - Estilo Cards Blancas */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+                            {LABS.map(lab => (
+                                <button 
+                                    key={lab.id}
+                                    onClick={() => { setCurrentLab(lab); setEditingSlot(null); }}
+                                    className={`p-4 md:p-5 rounded-2xl border-2 text-left transition-all ${currentLab.id === lab.id ? `bg-white border-[#805AD5] text-[#805AD5] shadow-lg scale-[1.03]` : 'bg-white border-transparent text-gray-500 hover:border-gray-200 shadow-sm'}`}
+                                >
+                                    <span className="text-xl md:text-2xl mb-2 block">{lab.icon}</span>
+                                    <span className="font-bold text-xs md:text-sm leading-tight">{lab.name}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Controles de Fecha - Cava */}
+                        {currentLab.id === 'cava' && (
+                            <div className="bg-white p-4 md:p-5 rounded-3xl border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 shadow-sm">
+                                <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                                    <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-200 shadow-inner w-full sm:w-auto justify-center">
+                                        <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate()-7)))} className="p-2.5 hover:bg-white hover:text-[#805AD5] rounded-xl text-gray-400 transition-colors"><Icons.ChevronLeft className="w-5 h-5" /></button>
+                                        <button onClick={() => setSelectedDate(new Date())} className="px-4 text-[11px] font-black uppercase text-gray-500">Hoy</button>
+                                        <button onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate()+7)))} className="p-2.5 hover:bg-white hover:text-[#805AD5] rounded-xl text-gray-400 transition-colors"><Icons.ChevronRight className="w-5 h-5" /></button>
+                                    </div>
+
+                                    <div className="date-picker-container group w-full sm:w-auto" onClick={(e) => e.currentTarget.querySelector('input').showPicker?.()}>
+                                        <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 px-5 py-2.5 rounded-2xl hover:border-[#805AD5] transition-all justify-center sm:justify-start">
+                                            <Icons.Calendar className="w-5 h-5 text-[#805AD5]" />
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase leading-none mb-1">Agenda Semanal</p>
+                                                <p className="text-xs md:text-sm font-bold text-gray-700 whitespace-nowrap uppercase">
+                                                    {mondayDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} - {new Date(mondayDate.getTime() + 5*24*60*60*1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <input type="date" className="native-date-input" onChange={(e) => setSelectedDate(new Date(e.target.value + 'T12:00:00'))} value={formatDateForInput(selectedDate)} />
                                     </div>
                                 </div>
-                            )}
+                                <div className="px-6 py-3 bg-[#D6BCFA] text-[#553C9A] rounded-2xl font-black text-[10px] md:text-[11px] flex items-center gap-2 w-full md:w-auto justify-center uppercase shadow-sm">
+                                    <span className="w-2 h-2 rounded-full bg-[#805AD5] animate-pulse"></span>
+                                    {currentLab.name}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Grilla Semanal - Light Mode */}
+                        <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden">
+                            <div className="overflow-x-auto no-scrollbar">
+                                <table className="w-full border-collapse table-fixed">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
+                                            <th className="p-3 w-16 sticky left-0 bg-gray-50 z-20 border-r border-gray-100"><Icons.Clock className="w-4 h-4 mx-auto opacity-50" /></th>
+                                            {DIAS.map((dia, idx) => {
+                                                const d = new Date(mondayDate);
+                                                d.setDate(d.getDate() + idx);
+                                                const isToday = d.toDateString() === new Date().toDateString();
+                                                return (
+                                                    <th key={idx} className={`p-4 border-l border-gray-100 ${isToday ? 'bg-[#B2F2BB]/20 text-[#2D3748]' : ''}`}>
+                                                        <p className="text-[10px] md:text-[11px] font-black uppercase tracking-widest">{dia}</p>
+                                                        {currentLab.id === 'cava' && (
+                                                            <p className="text-[9px] opacity-60 mt-1 font-bold">{d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</p>
+                                                        )}
+                                                    </th>
+                                                );
+                                            })}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {BLOQUES.map((hora, bloqueIdx) => (
+                                            <tr key={hora}>
+                                                <td className="p-3 text-center text-[10px] font-bold text-gray-400 bg-gray-50 border-r border-gray-100 sticky left-0 z-10">{hora}</td>
+                                                {DIAS.map((_, diaIdx) => {
+                                                    const d = new Date(mondayDate);
+                                                    d.setDate(d.getDate() + diaIdx);
+                                                    
+                                                    const dateId = currentLab.id === 'cava' ? formatDateForInput(d) : `day_${diaIdx}`;
+                                                    const slotId = `${currentLab.id}_${dateId}_${hora.replace(':', '')}`;
+                                                    
+                                                    const booking = schedules[slotId];
+                                                    const isEditing = editingSlot === slotId;
+
+                                                    return (
+                                                        <td 
+                                                            key={diaIdx} 
+                                                            className={`p-1.5 border-l border-gray-100 h-32 align-top transition-all ${isAdmin ? 'cursor-pointer hover:bg-[#F7FAFC]' : ''}`}
+                                                            onClick={() => {
+                                                                if (isAdmin && !isEditing) {
+                                                                    setEditingSlot(slotId);
+                                                                    setEditValues({ asignatura: booking?.asignatura || "", aula: booking?.aula || "" });
+                                                                }
+                                                            }}
+                                                        >
+                                                            {isEditing ? (
+                                                                <div className="edit-card w-full h-full rounded-xl p-2.5 flex flex-col gap-1.5 relative z-30 overflow-hidden" onClick={e => e.stopPropagation()}>
+                                                                    <div className="flex justify-between items-center">
+                                                                        <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">CLAVE {bloqueIdx + 1}</span>
+                                                                        <div className="flex gap-1">
+                                                                            <button onClick={() => commitBooking(slotId, hora)} className="text-[#805AD5] hover:text-[#553C9A] p-0.5"><Icons.Save size={12} /></button>
+                                                                            <button onClick={() => setEditingSlot(null)} className="text-gray-400 hover:text-red-500 p-0.5"><Icons.Trash size={12} /></button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <textarea
+                                                                        autoFocus
+                                                                        placeholder="Asignatura..."
+                                                                        className="edit-input w-full p-2 text-[10px] font-bold rounded-md h-14 resize-none leading-tight"
+                                                                        value={editValues.asignatura}
+                                                                        onChange={(e) => setEditValues({...editValues, asignatura: e.target.value})}
+                                                                    />
+                                                                    <input
+                                                                        placeholder="Docente / Aula..."
+                                                                        className="edit-input w-full p-1.5 text-[9px] font-bold rounded-md"
+                                                                        value={editValues.aula}
+                                                                        onChange={(e) => setEditValues({...editValues, aula: e.target.value})}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') commitBooking(slotId, hora);
+                                                                            if (e.key === 'Escape') setEditingSlot(null);
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ) : booking ? (
+                                                                <div className={`h-full w-full rounded-2xl p-3 shadow-sm flex flex-col justify-between transition-all slot-card bg-[#D6BCFA] text-[#2D3748] border-b-4 border-[#B794F4]`}>
+                                                                    <div className="flex justify-between items-start opacity-70">
+                                                                        <span className="text-[7px] font-black uppercase tracking-widest">CLAVE {bloqueIdx + 1}</span>
+                                                                        {isAdmin && <Icons.Unlock className="w-2.5 h-2.5 text-[#805AD5]" />}
+                                                                    </div>
+                                                                    <div className="mt-1">
+                                                                        <p className="font-extrabold text-[9px] md:text-[10px] leading-tight line-clamp-3 tracking-tight uppercase">{booking.asignatura}</p>
+                                                                        {booking.aula && <p className="text-[8px] opacity-80 font-bold mt-1 italic truncate bg-white/40 px-1.5 py-0.5 rounded-md">{booking.aula}</p>}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className={`h-full w-full border-2 border-dashed border-gray-100 rounded-xl flex items-center justify-center transition-all ${isAdmin ? 'hover:border-[#D6BCFA] hover:bg-[#D6BCFA]/10' : 'opacity-10'}`}>
+                                                                    {isAdmin && <span className="text-[9px] font-black text-[#D6BCFA] uppercase opacity-0 group-hover:opacity-100 transition-opacity tracking-tighter">Asignar</span>}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </main>
 
-                    <footer className="bg-slate-800 border-t border-slate-700 p-4 md:p-8 flex flex-wrap justify-between items-center gap-4 shrink-0 shadow-2xl">
-                        <div className="flex gap-3 md:gap-6 w-full md:w-auto">
-                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAutoPlaying ? 'bg-green-600/10 border-green-500 text-green-500 shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
-                                <Icon name={isAutoPlaying ? "Pause" : "Play"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAutoPlaying ? 'ROTACIÓN ON' : 'PAUSA'}</span>
-                            </button>
-                            <button onClick={() => isAdminMode ? auth.signOut() : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-8 py-2.5 md:py-4 rounded-xl border-2 ${isAdminMode ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-white'}`}>
-                                <Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={20}/> <span className="text-[10px] md:text-sm font-black uppercase tracking-widest">{isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMIN'}</span>
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-4 bg-slate-900/50 px-4 md:px-8 py-2 md:py-3 rounded-full border border-slate-700 shadow-inner ml-auto md:ml-0">
-                            <div className={`flex items-center gap-2 ${isOffline ? 'text-red-500 animate-pulse' : 'text-green-500'}`}>
-                                <Icon name={isOffline ? "WifiOff" : "Wifi"} size={18} />
-                                <span className="font-black text-[9px] md:text-[11px] uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : saveStatus === 'saved' ? 'SISTEMA SINCRONIZADO' : 'CAMBIOS PENDIENTES'}</span>
-                            </div>
-                            <div className="h-4 w-px bg-slate-700"></div>
-                            <div className="flex items-center gap-2 text-slate-500 font-black italic uppercase"><Icon name="Monitor" size={18}/><span className="font-black text-[9px] md:text-[11px]">FINCA 2026</span></div>
+                    <footer className="text-center py-10 opacity-60">
+                        <div className="inline-flex flex-col items-center gap-2 px-4">
+                            <div className="h-1 w-12 bg-[#805AD5] rounded-full"></div>
+                            <p className="text-[10px] text-[#1A202C] font-black uppercase tracking-[0.4em]">UVM Ingeniería</p>
+                            <p className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mt-1 text-center">Facultad de Ingeniería, Negocios y Agroambientales</p>
                         </div>
                     </footer>
-
-                    {showPassModal && (
-                        <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-2xl flex items-center justify-center z-[100] p-4">
-                            <div className="bg-slate-800 border-2 border-slate-700 p-8 md:p-10 rounded-2xl max-w-sm w-full font-black shadow-2xl">
-                                <div className="mb-6 text-blue-500 flex justify-center"><Icon name="Lock" size={40} /></div>
-                                <h3 className="text-lg md:text-xl font-black uppercase text-center mb-2">Acceso Administrador</h3>
-                                <p className="text-slate-400 text-[10px] text-center mb-8 px-2 leading-tight">Ingrese su correo institucional y contraseña en minúsculas para editar contenidos.</p>
-                                <div className="space-y-4 mb-8">
-                                    <input type="email" placeholder="usuario@uvm.cl" className="login-input lowercase" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
-                                    <input type="password" placeholder="••••••••" className="login-input lowercase" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleManualLogin()} />
-                                </div>
-                                {passError && <p className="text-red-500 text-[10px] font-black text-center mb-6 uppercase animate-shake italic">❌ Acceso denegado</p>}
-                                <div className="flex gap-4">
-                                    <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="flex-1 bg-slate-700 py-4 rounded-xl font-black text-white uppercase text-[10px]">Cancelar</button>
-                                    <button onClick={handleManualLogin} disabled={isLoggingIn} className="flex-1 bg-blue-600 py-4 rounded-xl font-black text-white uppercase text-[10px] shadow-xl shadow-blue-500/20 disabled:opacity-50">{isLoggingIn ? 'Entrando...' : 'Acceder'}</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             );
         };
