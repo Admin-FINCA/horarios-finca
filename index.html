@@ -137,14 +137,18 @@
             color: #64748b;
         }
 
+        /* Cabecera de los días en la vista semanal (Ajustado) */
         .header-day {
-            padding: 0.6rem;
+            padding: 0.4rem 0.5rem;
             border-radius: 1rem;
-            text-align: center;
-            font-weight: 800;
-            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
             text-transform: uppercase;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            margin: 0 8px; /* Evita que el botón sea tan ancho */
         }
     </style>
 </head>
@@ -177,11 +181,14 @@
 
         const YEARS = ["1", "2", "3", "4", "5"];
         const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+        
+        // 🔥 ACTUALIZACIÓN: Se redujeron las 15 claves a solo 5 vespertinas
         const HOURS = [
-            "08:20 - 09:05", "09:05 - 09:50", "10:00 - 10:45", "10:45 - 11:30",
-            "11:40 - 12:25", "12:25 - 13:10", "13:20 - 14:05", "14:05 - 14:50",
-            "15:00 - 15:45", "15:45 - 16:30", "16:40 - 17:25", "17:25 - 18:10",
-            "18:20 - 19:05", "19:05 - 19:50", "20:00 - 20:45"
+            "18:45 - 19:30", 
+            "19:30 - 20:15", 
+            "20:25 - 21:10", 
+            "21:10 - 21:55",
+            "22:05 - 22:50"
         ];
 
         const Icon = ({ name, size = 24, className = "" }) => {
@@ -326,7 +333,15 @@
             return (
                 <div className="flex flex-col min-h-screen relative">
                     
-                    <button onClick={() => setShowFAQ(true)} className="fixed bottom-24 right-4 md:right-8 z-[60] bg-accent text-white p-4 md:p-5 rounded-full shadow-2xl transition-all hover:scale-110 active:scale-95 animate-bounce"><Icon name="HelpCircle" size={32} /></button>
+                    {/* BOTÓN FLOTANTE "?" */}
+                    <button 
+                        onClick={() => setShowFAQ(true)} 
+                        className="fixed bottom-24 right-4 md:right-8 z-[60] text-slate-800 p-3 md:p-4 rounded-full shadow-2xl transition-all hover:scale-110 active:scale-95 animate-bounce border border-slate-200"
+                        style={{ backgroundColor: 'var(--highlight)' }}
+                        title="Preguntas Frecuentes"
+                    >
+                        <Icon name="HelpCircle" size={28} />
+                    </button>
 
                     {/* ENCABEZADO */}
                     <header className="bg-[var(--bg)] border-b border-slate-200 px-4 md:px-8 py-3 md:py-6 flex flex-wrap justify-between items-center shadow-sm z-20 shrink-0">
@@ -340,9 +355,10 @@
                             </div>
                         </div>
                         <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
+                            {/* 🔥 ACTUALIZACIÓN: RELOJ - Tamaño y contenedor reducidos */}
                             <div className="text-right">
-                                <div className="text-2xl md:text-4xl lg:text-5xl font-mono font-black text-accent leading-none drop-shadow-sm">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                <div className="text-[8px] md:text-[11px] text-slate-500 uppercase font-black mt-1 md:mt-3 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                                <div className="text-base md:text-xl lg:text-2xl font-mono font-bold text-accent leading-none drop-shadow-sm">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                <div className="text-[6px] md:text-[8px] text-slate-500 uppercase font-bold mt-1 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                             </div>
                             {isAdminMode && (
                                 <button onClick={persistToCloud} className={`p-3 md:p-5 rounded-2xl border-2 md:border-4 transition-all active:scale-90 relative ${modifiedKeys.size > 0 ? 'bg-amber-50 text-amber-500 border-amber-500 animate-bounce' : saveStatus === 'saved' ? 'bg-white/50 text-emerald-600 border-emerald-500/30' : 'bg-red-50 text-red-600 border-red-600'}`}><Icon name="Save" size={32} />{modifiedKeys.size > 0 && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded-full font-black shadow-md">{modifiedKeys.size}</span>}</button>
@@ -350,16 +366,16 @@
                         </div>
                     </header>
 
-                    {/* BANNER CARRERA - COLOR Y FONDO ACTUALIZADOS SEGÚN IMAGEN */}
-                    <div className="py-4 md:py-8 px-4 md:px-8 flex justify-between items-center shadow-lg sticky top-0 z-10 transition-colors duration-1000" style={{ backgroundColor: 'var(--brand)' }}>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronLeft" size={44} /></button>
-                        <div className="text-center font-black flex-1 text-slate-900">
-                            <h2 className="text-lg md:text-5xl lg:text-6xl uppercase tracking-tighter leading-none mb-2">{career.name}</h2>
-                            <div className="flex items-center justify-center gap-2 md:gap-4 mt-2 opacity-90 uppercase text-[8px] md:text-sm font-black tracking-widest italic text-slate-800">
-                                <Icon name="GraduationCap" size={20}/> CARRERA {currentCareerIdx+1}/{CAREERS.length}
+                    {/* BANNER CARRERA */}
+                    <div className="py-4 md:py-6 px-4 md:px-8 flex justify-between items-center shadow-lg sticky top-0 z-10 transition-colors duration-1000" style={{ backgroundColor: 'var(--brand)' }}>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronLeft" size={36} /></button>
+                        <div className="text-center font-bold flex-1 text-slate-900">
+                            <h2 className="text-lg md:text-3xl lg:text-4xl uppercase tracking-tight leading-none mb-1">{career.name}</h2>
+                            <div className="flex items-center justify-center gap-2 md:gap-4 mt-2 opacity-90 uppercase text-[8px] md:text-xs tracking-widest italic text-slate-800">
+                                <Icon name="GraduationCap" size={18}/> CARRERA {currentCareerIdx+1}/{CAREERS.length}
                             </div>
                         </div>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronRight" size={44} /></button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronRight" size={36} /></button>
                     </div>
 
                     <main className="flex-1 p-4 md:p-10 flex flex-col gap-6 md:gap-8 max-w-[1500px] mx-auto w-full">
@@ -395,7 +411,8 @@
                         <div className="w-full mb-16">
                             {viewMode === 'daily' ? (
                                 <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
-                                    <h3 className="text-center text-slate-800 font-black uppercase text-xl md:text-4xl italic mb-10 tracking-widest drop-shadow-sm">Programación de {currentDayName}</h3>
+                                    {/* 🔥 ACTUALIZACIÓN: Título "Programación..." reducido y reajustado */}
+                                    <h3 className="text-center text-slate-700 font-bold uppercase text-lg md:text-2xl italic mb-6 tracking-widest drop-shadow-sm">Programación de {currentDayName}</h3>
                                     {HOURS.map((h, i) => {
                                         const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
                                         return (
@@ -422,7 +439,7 @@
                                 <div className="overflow-x-auto pb-10 custom-scrollbar rounded-[2rem] shadow-inner bg-black/[0.01] p-4">
                                     <div className="weekly-grid">
                                         <div className="h-10 md:h-16 flex items-center justify-center font-black text-slate-400 uppercase text-[8px] md:text-xs tracking-widest">Clave</div>
-                                        {DAYS.map(day => <div key={day} className={`header-day ${day === currentDayName ? 'btn-active-style' : 'bg-white text-slate-400 border border-slate-100'}`}>{day}</div>)}
+                                        {DAYS.map(day => <div key={day} className={`header-day mx-1 md:mx-2 ${day === currentDayName ? 'btn-active-style' : 'bg-white text-slate-400 border border-slate-100'}`}>{day}</div>)}
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
                                                 <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-400">
@@ -459,27 +476,28 @@
                         </div>
                     </footer>
 
+                    {/* 🔥 ACTUALIZACIÓN: MODAL FAQ - Tamaño reducido */}
                     {showFAQ && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-6">
-                            <div className="bg-white border-2 border-slate-100 p-8 md:p-14 rounded-[3rem] max-w-3xl w-full relative max-h-[85vh] overflow-y-auto shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] ring-1 ring-black/5">
-                                <button onClick={() => setShowFAQ(false)} className="absolute top-10 right-10 text-slate-300 hover:text-slate-800 transition-colors active:scale-90"><Icon name="X" size={44}/></button>
-                                <div className="mb-8 text-accent flex justify-center drop-shadow-sm"><Icon name="HelpCircle" size={100} /></div>
-                                <h3 className="text-3xl md:text-5xl font-black uppercase text-center mb-10 text-slate-800 tracking-tight">Ayuda UVM</h3>
-                                <div className="space-y-6">
-                                    <div className="faq-card p-8 rounded-[2rem]">
-                                        <h4 className="text-accent font-black text-lg md:text-xl uppercase mb-3 tracking-wide flex items-center gap-3"><span className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm">1</span>¿Qué son las Claves?</h4>
-                                        <p className="text-slate-600 text-sm md:text-lg leading-relaxed">Bloques de 45 minutos. El sistema cubre desde las 08:20 hasta las 20:45 hrs en 15 claves.</p>
+                            <div className="bg-white border-2 border-slate-100 p-6 md:p-8 rounded-[2rem] max-w-xl w-full relative max-h-[75vh] overflow-y-auto shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] ring-1 ring-black/5">
+                                <button onClick={() => setShowFAQ(false)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-800 transition-colors active:scale-90"><Icon name="X" size={32}/></button>
+                                <div className="mb-6 text-accent flex justify-center drop-shadow-sm"><Icon name="HelpCircle" size={60} /></div>
+                                <h3 className="text-xl md:text-3xl font-black uppercase text-center mb-6 text-slate-800 tracking-tight">Ayuda UVM</h3>
+                                <div className="space-y-4">
+                                    <div className="faq-card p-5 rounded-xl">
+                                        <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">1</span>¿Qué son las Claves?</h4>
+                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Bloques de 45 minutos. El sistema cubre desde las 18:45 hasta las 22:50 hrs en 5 claves vespertinas.</p>
                                     </div>
-                                    <div className="faq-card p-8 rounded-[2rem]">
-                                        <h4 className="text-accent font-black text-lg md:text-xl uppercase mb-3 tracking-wide flex items-center gap-3"><span className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm">2</span>¿Cómo guardar cambios?</h4>
-                                        <p className="text-slate-600 text-sm md:text-lg leading-relaxed">Edite cualquier materia o sala en diferentes carreras. El disquete acumulará los cambios y los guardará todos a la vez al pulsarlo.</p>
+                                    <div className="faq-card p-5 rounded-xl">
+                                        <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">2</span>¿Cómo guardar cambios?</h4>
+                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Edite cualquier materia o sala en diferentes carreras. El disquete acumulará los cambios y los guardará todos a la vez al pulsarlo.</p>
                                     </div>
-                                    <div className="faq-card p-8 rounded-[2rem]">
-                                        <h4 className="text-accent font-black text-lg md:text-xl uppercase mb-3 tracking-wide flex items-center gap-3"><span className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm">3</span>¿Rotación Automática?</h4>
-                                        <p className="text-slate-600 text-sm md:text-lg leading-relaxed">Configurado para TV. Cada 15 segundos cambia de carrera automáticamente. Puede pausar el modo TV usando el botón inferior.</p>
+                                    <div className="faq-card p-5 rounded-xl">
+                                        <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">3</span>¿Rotación Automática?</h4>
+                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Configurado para TV. Cada 15 segundos cambia de carrera automáticamente. Puede pausar el modo TV usando el botón inferior.</p>
                                     </div>
                                 </div>
-                                <div className="mt-14 text-center"><button onClick={() => setShowFAQ(false)} className="bg-accent py-6 px-16 rounded-[2.5rem] font-black text-white uppercase text-sm shadow-xl hover:scale-105 active:scale-95 transition-all tracking-widest">Entendido</button></div>
+                                <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-accent py-4 px-10 rounded-[2rem] font-black text-white uppercase text-xs shadow-xl hover:scale-105 active:scale-95 transition-all tracking-widest">Entendido</button></div>
                             </div>
                         </div>
                     )}
