@@ -137,7 +137,7 @@
             color: #64748b;
         }
 
-        /* Cabecera de los días en la vista semanal (Ajustado) */
+        /* Cabecera de los días en la vista semanal */
         .header-day {
             padding: 0.4rem 0.5rem;
             border-radius: 1rem;
@@ -148,7 +148,7 @@
             font-size: 0.75rem;
             text-transform: uppercase;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            margin: 0 8px; /* Evita que el botón sea tan ancho */
+            margin: 0 8px; 
         }
     </style>
 </head>
@@ -171,7 +171,11 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        const ADMIN_UID = ["6HmCH1dusWV0UGPU2gST4AUaCrJ2", "p3PkkqRMfRd1IVZdcy5oJNhD2222"];
+        // 🔥 ACTUALIZACIÓN: Lista de UIDs con permisos de Administrador
+        const ADMIN_UIDS = [
+            "6HmCH1dusWV0UGPU2gST4AUaCrJ2", 
+            "p3PkkqRMfRd1IVZdcy5oJNhD2222"
+        ];
 
         const CAREERS = [
             { id: "construccion", name: "Ingeniería en Construcción", plans: ["Plan regular", "Continuidad de estudios"] },
@@ -182,7 +186,7 @@
         const YEARS = ["1", "2", "3", "4", "5"];
         const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         
-        // 🔥 ACTUALIZACIÓN: Se redujeron las 15 claves a solo 5 vespertinas
+        // 5 Claves vespertinas
         const HOURS = [
             "18:45 - 19:30", 
             "19:30 - 20:15", 
@@ -218,7 +222,6 @@
             const [selectedYear, setSelectedYear] = useState("1");
             const [viewMode, setViewMode] = useState('daily');
             const [currentTime, setCurrentTime] = useState(new Date());
-            const [isAutoPlaying, setIsAutoPlaying] = useState(true);
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [showPassModal, setShowPassModal] = useState(false);
             const [showFAQ, setShowFAQ] = useState(false);
@@ -238,8 +241,12 @@
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged(u => {
                     setUser(u);
-                    if (u && u.uid === ADMIN_UID) setIsAdminMode(true);
-                    else setIsAdminMode(false);
+                    // 🔥 Comprobamos si el UID del usuario está en el arreglo de admins permitidos
+                    if (u && ADMIN_UIDS.includes(u.uid)) {
+                        setIsAdminMode(true);
+                    } else {
+                        setIsAdminMode(false);
+                    }
                     setIsSystemReady(true);
                 });
                 auth.signInAnonymously().catch(() => {});
@@ -262,14 +269,8 @@
 
             useEffect(() => {
                 const t = setInterval(() => setCurrentTime(new Date()), 1000);
-                const r = setInterval(() => {
-                    if (isAutoPlaying && !isAdminMode && !showPassModal && !showFAQ) {
-                        setCurrentCareerIdx(p => (p + 1) % CAREERS.length);
-                        setSelectedPlanIdx(0);
-                    }
-                }, 15000);
-                return () => { clearInterval(t); clearInterval(r); };
-            }, [isAutoPlaying, isAdminMode, showPassModal, showFAQ]);
+                return () => clearInterval(t);
+            }, []);
 
             const handleManualLogin = async () => {
                 if (!userInput || !passwordInput) return;
@@ -277,7 +278,8 @@
                 setPassError(false);
                 try {
                     const cred = await auth.signInWithEmailAndPassword(userInput.trim().toLowerCase(), passwordInput.trim().toLowerCase());
-                    if (cred.user.uid === ADMIN_UID) {
+                    // 🔥 Comprobamos si el UID del usuario logueado está en el arreglo de admins
+                    if (ADMIN_UIDS.includes(cred.user.uid)) {
                         setIsAdminMode(true);
                         setShowPassModal(false);
                     } else {
@@ -355,7 +357,6 @@
                             </div>
                         </div>
                         <div className="flex items-center gap-4 md:gap-8 mt-2 md:mt-0 ml-auto md:ml-0">
-                            {/* 🔥 ACTUALIZACIÓN: RELOJ - Tamaño y contenedor reducidos */}
                             <div className="text-right">
                                 <div className="text-base md:text-xl lg:text-2xl font-mono font-bold text-accent leading-none drop-shadow-sm">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                 <div className="text-[6px] md:text-[8px] text-slate-500 uppercase font-bold mt-1 tracking-widest">{currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
@@ -368,14 +369,14 @@
 
                     {/* BANNER CARRERA */}
                     <div className="py-4 md:py-6 px-4 md:px-8 flex justify-between items-center shadow-lg sticky top-0 z-10 transition-colors duration-1000" style={{ backgroundColor: 'var(--brand)' }}>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronLeft" size={36} /></button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setSelectedPlanIdx(0);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronLeft" size={36} /></button>
                         <div className="text-center font-bold flex-1 text-slate-900">
                             <h2 className="text-lg md:text-3xl lg:text-4xl uppercase tracking-tight leading-none mb-1">{career.name}</h2>
                             <div className="flex items-center justify-center gap-2 md:gap-4 mt-2 opacity-90 uppercase text-[8px] md:text-xs tracking-widest italic text-slate-800">
                                 <Icon name="GraduationCap" size={18}/> CARRERA {currentCareerIdx+1}/{CAREERS.length}
                             </div>
                         </div>
-                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setSelectedPlanIdx(0); setIsAutoPlaying(false);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronRight" size={36} /></button>
+                        <button onClick={() => {setCurrentCareerIdx(p => (p + 1) % CAREERS.length); setSelectedPlanIdx(0);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronRight" size={36} /></button>
                     </div>
 
                     <main className="flex-1 p-4 md:p-10 flex flex-col gap-6 md:gap-8 max-w-[1500px] mx-auto w-full">
@@ -385,7 +386,7 @@
                             {career.plans.map((plan, pIdx) => (
                                 <button
                                     key={pIdx}
-                                    onClick={() => { setSelectedPlanIdx(pIdx); setIsAutoPlaying(false); }}
+                                    onClick={() => { setSelectedPlanIdx(pIdx); }}
                                     className={`px-6 md:px-12 py-3 md:py-4 rounded-2xl font-black text-[10px] md:text-sm uppercase tracking-widest transition-all ${
                                         selectedPlanIdx === pIdx ? 'btn-active-style' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'
                                     }`}
@@ -398,7 +399,7 @@
                         <div className="flex flex-col items-center gap-6">
                             <div className="flex flex-wrap justify-center gap-2 md:gap-3 bg-white p-2 md:p-3 rounded-full border border-slate-200 shadow-sm">
                                 {YEARS.map(y => (
-                                    <button key={y} onClick={() => { setSelectedYear(y); setIsAutoPlaying(false); }} 
+                                    <button key={y} onClick={() => { setSelectedYear(y); }} 
                                         className={`btn-year-pill ${selectedYear === y ? 'btn-active-style' : ''}`}>{y}er año</button>
                                 ))}
                             </div>
@@ -411,7 +412,6 @@
                         <div className="w-full mb-16">
                             {viewMode === 'daily' ? (
                                 <div className="space-y-4 md:space-y-6 max-w-5xl mx-auto">
-                                    {/* 🔥 ACTUALIZACIÓN: Título "Programación..." reducido y reajustado */}
                                     <h3 className="text-center text-slate-700 font-bold uppercase text-lg md:text-2xl italic mb-6 tracking-widest drop-shadow-sm">Programación de {currentDayName}</h3>
                                     {HOURS.map((h, i) => {
                                         const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
@@ -442,9 +442,9 @@
                                         {DAYS.map(day => <div key={day} className={`header-day mx-1 md:mx-2 ${day === currentDayName ? 'btn-active-style' : 'bg-white text-slate-400 border border-slate-100'}`}>{day}</div>)}
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
-                                                <div className="flex flex-col justify-center items-center text-[10px] md:text-[11px] font-mono font-bold text-slate-400">
-                                                    <span className="font-black text-slate-800">C{hIdx + 1}</span>
-                                                    <span className="mt-1 text-[7px] md:text-[9px] opacity-60 italic">{h.split(' - ')[0]}</span>
+                                                <div className="flex flex-col justify-center items-center font-mono text-slate-500">
+                                                    <span className="font-black text-slate-800 text-xs md:text-sm">C{hIdx + 1}</span>
+                                                    <span className="mt-1 text-[9px] md:text-[11px] opacity-80 italic font-bold">{h.split(' - ')[0]}</span>
                                                 </div>
                                                 {DAYS.map(day => {
                                                     const slot = (schedules[currentDocId]?.[day] || [])[hIdx] || { subject: '', room: '' };
@@ -466,8 +466,7 @@
 
                     <footer className="bg-white border-t border-slate-200 p-6 md:p-10 flex flex-wrap justify-between items-center gap-6 shrink-0 shadow-lg">
                         <div className="flex gap-4 md:gap-8 w-full md:w-auto justify-center md:justify-start">
-                            <button onClick={() => setIsAutoPlaying(!isAutoPlaying)} className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-6 md:px-10 py-3 md:py-4 rounded-2xl border-2 transition-all font-black text-xs md:text-sm uppercase tracking-widest ${isAutoPlaying ? 'bg-emerald-50 border-emerald-500 text-emerald-600 shadow-sm ring-4 ring-emerald-500/10' : 'bg-slate-100 border-slate-300 text-slate-500'}`}><Icon name={isAutoPlaying ? "Pause" : "Play"} size={22}/> {isAutoPlaying ? 'ROTACIÓN ON' : 'PAUSA'}</button>
-                            <button onClick={() => isAdminMode ? auth.signOut() : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-6 md:px-10 py-3 md:py-4 rounded-2xl border-2 transition-all font-black text-xs md:text-sm uppercase tracking-widest ${isAdminMode ? 'bg-red-50 border-red-500 text-red-600 shadow-sm ring-4 ring-red-500/10' : 'bg-slate-100 border-slate-300 text-slate-500 hover:text-slate-800'}`}><Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={22}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMIN'}</button>
+                            <button onClick={() => isAdminMode ? auth.signOut() : setShowPassModal(true)} className={`flex-1 md:flex-none flex items-center justify-center gap-3 px-6 md:px-10 py-3 md:py-4 rounded-2xl border-2 transition-all font-black text-xs md:text-sm uppercase tracking-widest ${isAdminMode ? 'bg-red-50 border-red-500 text-red-700 shadow-sm ring-4 ring-red-500/10' : 'bg-slate-100 border-slate-300 text-slate-500 hover:text-slate-800'}`}><Icon name={isAdminMode ? "ChevronLeft" : "Lock"} size={22}/> {isAdminMode ? 'SALIR GESTIÓN' : 'MODO ADMIN'}</button>
                         </div>
                         <div className="flex items-center gap-6 bg-slate-50 px-6 md:px-10 py-3 md:py-4 rounded-full border border-slate-200 shadow-inner ml-auto md:ml-0 mx-auto md:mx-0">
                             <div className={`flex items-center gap-3 ${isOffline ? 'text-red-500 animate-pulse' : 'text-emerald-600'}`}><Icon name={isOffline ? "WifiOff" : "Wifi"} size={24} /><span className="font-black text-[10px] md:text-sm uppercase tracking-widest">{isOffline ? 'SIN CONEXIÓN' : 'SISTEMA SINCRONIZADO'}</span></div>
@@ -476,7 +475,6 @@
                         </div>
                     </footer>
 
-                    {/* 🔥 ACTUALIZACIÓN: MODAL FAQ - Tamaño reducido */}
                     {showFAQ && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-6">
                             <div className="bg-white border-2 border-slate-100 p-6 md:p-8 rounded-[2rem] max-w-xl w-full relative max-h-[75vh] overflow-y-auto shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] ring-1 ring-black/5">
@@ -493,8 +491,8 @@
                                         <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Edite cualquier materia o sala en diferentes carreras. El disquete acumulará los cambios y los guardará todos a la vez al pulsarlo.</p>
                                     </div>
                                     <div className="faq-card p-5 rounded-xl">
-                                        <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">3</span>¿Rotación Automática?</h4>
-                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Configurado para TV. Cada 15 segundos cambia de carrera automáticamente. Puede pausar el modo TV usando el botón inferior.</p>
+                                        <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">3</span>¿Navegación?</h4>
+                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">El usuario tiene control total para navegar entre las diferentes carreras, años y planes mediante los botones de la interfaz.</p>
                                     </div>
                                 </div>
                                 <div className="mt-8 text-center"><button onClick={() => setShowFAQ(false)} className="bg-accent py-4 px-10 rounded-[2rem] font-black text-white uppercase text-xs shadow-xl hover:scale-105 active:scale-95 transition-all tracking-widest">Entendido</button></div>
