@@ -17,7 +17,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
         
         :root {
             --brand: #A5D6A7;   
@@ -59,7 +59,7 @@
             width: 100%;
             outline: none;
             transition: all 0.2s;
-            resize: none; /* 🔥 Bloquea redimensionamiento manual */
+            resize: none; 
         }
         .input-admin:focus { border-color: var(--accent); box-shadow: 0 4px 12px rgba(84, 102, 122, 0.15); }
 
@@ -72,7 +72,7 @@
             width: 100%;
             font-size: 11px;
             outline: none;
-            resize: none; /* 🔥 Bloquea redimensionamiento manual */
+            resize: none; 
         }
 
         .login-input {
@@ -110,7 +110,6 @@
             transition: all 0.3s ease;
         }
 
-        /* Botones estilo imagen 69f9aa */
         .btn-active-style {
             background: var(--highlight) !important;
             color: var(--accent) !important;
@@ -139,7 +138,6 @@
             color: #64748b;
         }
 
-        /* Cabecera de los días en la vista semanal */
         .header-day {
             padding: 0.4rem 0.5rem;
             border-radius: 1rem;
@@ -151,6 +149,61 @@
             text-transform: uppercase;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
             margin: 0 8px; 
+        }
+
+        /* ---------------------------------------------------- */
+        /* 🔥 ESTILOS DEL RENDERER MULTILÍNEA DE ASIGNATURAS */
+        /* ---------------------------------------------------- */
+        .event {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 100%;
+        }
+        .event .line1 { 
+            font-weight: 800; 
+            font-size: 14px; 
+            text-transform: uppercase; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            color: #1e293b;
+        }
+        .event .line2 { 
+            font-weight: 700; 
+            font-size: 13px; 
+            text-transform: uppercase; 
+            display: -webkit-box; 
+            -webkit-line-clamp: 2; 
+            -webkit-box-orient: vertical; 
+            overflow: hidden; 
+            color: #334155; 
+            line-height: 1.1;
+        }
+        .event .line3 { 
+            font-style: italic; 
+            font-weight: 800;
+            font-size: 12px; 
+            text-transform: uppercase; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        /* 🔥 ACTUALIZACIÓN: Ajuste Específico Vista Diaria (Agrandado para igualar la hora) */
+        .view-daily .line1 { font-size: 16px; }
+        .view-daily .line2 { font-size: 14px; }
+        .view-daily .line3 { font-size: 12px; }
+
+        @media (min-width: 768px) {
+            .view-daily .line1 { font-size: 20px; } /* Se alinea con md:text-xl (20px) de la hora */
+            .view-daily .line2 { font-size: 16px; margin-top: 4px; }
+            .view-daily .line3 { font-size: 14px; margin-top: 6px; }
         }
     </style>
 </head>
@@ -187,7 +240,6 @@
         const YEARS = ["1", "2", "3", "4", "5"];
         const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         
-        // 5 Claves vespertinas
         const HOURS = [
             "18:45 - 19:30", 
             "19:30 - 20:15", 
@@ -334,7 +386,6 @@
             return (
                 <div className="flex flex-col min-h-screen relative">
                     
-                    {/* BOTÓN FLOTANTE "?" */}
                     <button 
                         onClick={() => setShowFAQ(true)} 
                         className="fixed bottom-24 right-4 md:right-8 z-[60] text-slate-800 p-3 md:p-4 rounded-full shadow-2xl transition-all hover:scale-110 active:scale-95 animate-bounce border border-slate-200"
@@ -344,7 +395,6 @@
                         <Icon name="HelpCircle" size={28} />
                     </button>
 
-                    {/* ENCABEZADO */}
                     <header className="bg-[var(--bg)] border-b border-slate-200 px-4 md:px-8 py-3 md:py-6 flex flex-wrap justify-between items-center shadow-sm z-20 shrink-0">
                         <div className="flex items-center gap-4 md:gap-6">
                             <div className="bg-white p-1.5 rounded-xl shadow-sm border border-slate-100 w-16 h-16 md:w-28 md:h-28 flex items-center justify-center overflow-hidden shrink-0">
@@ -366,7 +416,6 @@
                         </div>
                     </header>
 
-                    {/* BANNER CARRERA */}
                     <div className="py-4 md:py-6 px-4 md:px-8 flex justify-between items-center shadow-lg sticky top-0 z-10 transition-colors duration-1000" style={{ backgroundColor: 'var(--brand)' }}>
                         <button onClick={() => {setCurrentCareerIdx(p => (p - 1 + CAREERS.length) % CAREERS.length); setSelectedPlanIdx(0);}} className="p-2 md:p-3 text-slate-900 hover:bg-black/10 rounded-full transition-all active:scale-75"><Icon name="ChevronLeft" size={36} /></button>
                         <div className="text-center font-bold flex-1 text-slate-900">
@@ -380,7 +429,6 @@
 
                     <main className="flex-1 p-4 md:p-10 flex flex-col gap-6 md:gap-8 max-w-[1500px] mx-auto w-full">
                         
-                        {/* SECCIÓN DE SUB-PLANES */}
                         <div className="flex flex-wrap justify-center gap-3 md:gap-6 mt-2">
                             {career.plans.map((plan, pIdx) => (
                                 <button
@@ -414,6 +462,11 @@
                                     <h3 className="text-center text-slate-700 font-bold uppercase text-lg md:text-2xl italic mb-6 tracking-widest drop-shadow-sm">Programación de {currentDayName}</h3>
                                     {HOURS.map((h, i) => {
                                         const slot = (currentSchedule[currentDayName] || [])[i] || { hour: h, subject: '', room: '' };
+                                        
+                                        const subjectParts = slot.subject ? slot.subject.split('\n') : [];
+                                        const line1 = subjectParts[0] || '';
+                                        const line2 = subjectParts.slice(1).join(' ') || '';
+
                                         return (
                                             <div key={i} className={`slot-card flex items-center p-5 md:p-8 ${slot.subject ? 'border-l-accent' : 'opacity-40 border-dashed border-slate-300 bg-slate-100/50 border-l-slate-300'}`}>
                                                 <div className="w-28 md:w-56 text-xs md:text-xl font-mono font-bold text-slate-500 shrink-0 leading-none">
@@ -421,14 +474,24 @@
                                                 </div>
                                                 {isAdminMode ? (
                                                     <div className="flex-1 flex flex-col md:flex-row gap-3 md:gap-6 ml-6 md:ml-10">
-                                                        {/* 🔥 Se agregó resize-none aquí para bloquear el ajuste de tamaño en modo diario */}
-                                                        <textarea rows="1" placeholder="Asignatura..." className="input-admin resize-none text-sm font-bold md:text-lg" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
-                                                        <input type="text" placeholder="Sala" className="input-admin w-full md:w-52 text-center text-accent font-black h-12 md:h-16 text-sm md:text-xl" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
+                                                        <textarea rows="2" placeholder="Categoría&#10;Código y Nombre" className="input-admin resize-none text-sm font-bold md:text-lg" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'subject', e.target.value)} />
+                                                        <input type="text" placeholder="Sala" className="input-admin w-full md:w-52 text-center text-accent font-black h-12 md:h-14 text-sm md:text-xl" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, currentDayName, i, 'room', e.target.value)} />
                                                     </div>
                                                 ) : (
-                                                    <div className="flex-1 ml-8 md:ml-14 overflow-hidden font-black text-left">
-                                                        <div className="text-xl md:text-4xl uppercase truncate text-slate-800 tracking-tight">{slot.subject || "BLOQUE LIBRE"}</div>
-                                                        {slot.subject && <div className="text-accent uppercase text-[10px] md:text-xl mt-2 flex items-center gap-2 font-black italic tracking-widest"><Icon name="Monitor" size={18} className="md:w-6 md:h-6"/> SALA {slot.room}</div>}
+                                                    <div className="flex-1 ml-8 md:ml-14 overflow-hidden text-left event view-daily flex flex-col justify-center">
+                                                        {slot.subject ? (
+                                                            <Fragment>
+                                                                <div className="line1" title={line1}>{line1}</div>
+                                                                {line2 && <div className="line2" title={line2}>{line2}</div>}
+                                                                {slot.room && (
+                                                                    <div className="line3" title={slot.room}>
+                                                                        <Icon name="Monitor" size={16} className="shrink-0"/> SALA {slot.room}
+                                                                    </div>
+                                                                )}
+                                                            </Fragment>
+                                                        ) : (
+                                                            <div className="line1 text-slate-400 opacity-60">BLOQUE LIBRE</div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -440,6 +503,7 @@
                                     <div className="weekly-grid">
                                         <div className="h-10 md:h-16 flex items-center justify-center font-black text-slate-400 uppercase text-[8px] md:text-xs tracking-widest">Clave</div>
                                         {DAYS.map(day => <div key={day} className={`header-day mx-1 md:mx-2 ${day === currentDayName ? 'btn-active-style' : 'bg-white text-slate-400 border border-slate-100'}`}>{day}</div>)}
+                                        
                                         {HOURS.map((h, hIdx) => (
                                             <Fragment key={hIdx}>
                                                 <div className="flex flex-col justify-center items-center font-mono text-slate-500">
@@ -448,15 +512,30 @@
                                                 </div>
                                                 {DAYS.map(day => {
                                                     const slot = (schedules[currentDocId]?.[day] || [])[hIdx] || { subject: '', room: '' };
+                                                    
+                                                    const subjectParts = slot.subject ? slot.subject.split('\n') : [];
+                                                    const line1 = subjectParts[0] || '';
+                                                    const line2 = subjectParts.slice(1).join(' ') || '';
+
                                                     return (
                                                         <div key={day + hIdx} className={`p-3 md:p-5 rounded-2xl min-h-[50px] flex flex-col border shadow-sm transition-all relative ${slot.subject ? 'bg-white border-slate-200 border-l-4 border-l-accent' : 'bg-slate-50/40 border-slate-100 opacity-40'}`}>
                                                             <div className="text-[7px] md:text-[9px] font-mono text-slate-400 border-b border-slate-50 pb-1.5 mb-2 italic uppercase font-black">CLAVE {hIdx+1}</div>
-                                                            {isAdminMode ? <div className="flex flex-col gap-2 h-full">
-                                                                {/* 🔥 Se agregó resize-none aquí para bloquear el ajuste de tamaño en modo semanal */}
-                                                                <textarea className="input-admin-sm resize-none text-[9px] font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} />
-                                                                <input className="input-admin-sm text-center text-accent py-1 font-black" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} />
-                                                            </div>
-                                                            : <Fragment><div className="text-[10px] md:text-[14px] font-black leading-tight text-slate-700 truncate uppercase text-left tracking-tight mb-2">{slot.subject}</div>{slot.subject && <div className="text-[8px] md:text-[11px] text-accent font-black mt-auto italic text-left tracking-widest">SALA {slot.room}</div>}</Fragment>}
+                                                            {isAdminMode ? (
+                                                                <div className="flex flex-col gap-2 h-full">
+                                                                    <textarea rows="2" placeholder="Cat.&#10;Cód y Nom" className="input-admin-sm resize-none text-[9px] font-bold" value={slot.subject} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'subject', e.target.value)} />
+                                                                    <input className="input-admin-sm text-center text-accent py-1 font-black" placeholder="Sala" value={slot.room} onChange={e => handleUpdate(career.id, selectedYear, day, hIdx, 'room', e.target.value)} />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="event flex-1 overflow-hidden mt-1">
+                                                                    {slot.subject ? (
+                                                                        <Fragment>
+                                                                            <div className="line1" title={line1}>{line1}</div>
+                                                                            {line2 && <div className="line2" title={line2}>{line2}</div>}
+                                                                            {slot.room && <div className="line3 mt-auto" title={slot.room}>SALA {slot.room}</div>}
+                                                                        </Fragment>
+                                                                    ) : null}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
@@ -492,7 +571,7 @@
                                     </div>
                                     <div className="faq-card p-5 rounded-xl">
                                         <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">2</span>¿Cómo guardar cambios?</h4>
-                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Edite cualquier materia o sala en diferentes carreras. El disquete acumulará los cambios y los guardará todos a la vez al pulsarlo.</p>
+                                        <p className="text-slate-600 text-xs md:text-sm leading-relaxed">Edite cualquier materia o sala en diferentes carreras. El disquete acumulará los cambios y los guardará todos a la vez al pulsarlo. <br/><b>Tip:</b> Si ingresa los datos de una materia y pulsa la tecla "Enter", separará el texto en un nuevo formato estilizado.</p>
                                     </div>
                                     <div className="faq-card p-5 rounded-xl">
                                         <h4 className="text-accent font-black text-sm md:text-base uppercase mb-2 tracking-wide flex items-center gap-3"><span className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-xs">3</span>¿Navegación?</h4>
@@ -524,8 +603,8 @@
                                 </div>
                                 {passError && <p className="text-red-500 text-xs md:text-sm font-black text-center mb-10 uppercase animate-shake italic p-3 bg-red-50 rounded-xl">❌ Credenciales Incorrectas</p>}
                                 <div className="flex gap-6">
-                                    <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="flex-1 bg-slate-100 py-5 rounded-[1.5rem] font-black text-slate-500 uppercase text-xs tracking-widest border border-slate-200 hover:bg-slate-200 transition-all active:scale-95">Cancelar</button>
-                                    <button onClick={handleManualLogin} disabled={isLoggingIn} className="flex-1 btn-active-style py-5 rounded-[1.5rem] font-black text-white uppercase text-xs tracking-widest shadow-xl disabled:opacity-50 transition-all hover:scale-105 active:scale-95">
+                                    <button onClick={() => {setShowPassModal(false); setPassError(false);}} className="flex-1 bg-white text-slate-400 border border-slate-200 hover:bg-slate-50 py-5 rounded-2xl font-black uppercase text-xs tracking-widest transition-all active:scale-95">Cancelar</button>
+                                    <button onClick={handleManualLogin} disabled={isLoggingIn} className="flex-1 btn-active-style py-5 rounded-2xl font-black uppercase text-xs tracking-widest transition-all disabled:opacity-50 hover:scale-105 active:scale-95">
                                         {isLoggingIn ? 'Autenticando...' : 'Acceder'}
                                     </button>
                                 </div>
